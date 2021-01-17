@@ -1,0 +1,36 @@
+From 5817306c51fccb9a6a8906a00f5ffeb5116b55cd Mon Sep 17 00:00:00 2001
+From: Yuan Jianpeng <yuanjianpeng@360.cn>
+Date: Mon, 30 Mar 2020 22:34:44 +0800
+Subject: [PATCH] add no auto vif module param
+
+---
+ ath10k-4.19/mac.c | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/ath10k-4.19/mac.c b/ath10k-4.19/mac.c
+index b31e565..d3c293e 100644
+--- a/ath10k-4.19/mac.c
++++ b/ath10k-4.19/mac.c
+@@ -348,6 +348,9 @@ int ath10k_modparam_target_num_rate_ctrl_objs_ct = 0;
+ module_param_named(num_rate_ctrl_objs_ct, ath10k_modparam_target_num_rate_ctrl_objs_ct, int, 0444);
+ MODULE_PARM_DESC(num_rate_ctrl_objs_ct, "Number of rate-ctrl objects to cache in firmware RAM");
+ 
++int ath10k_no_auto_vif = 1;
++module_param_named(no_auto_vif, ath10k_no_auto_vif, int, 0444);
++MODULE_PARM_DESC(no_auto_vif, "Dont create default vif when module installed");
+ 
+ /**********/
+ /* Crypto */
+@@ -9650,6 +9653,9 @@ int ath10k_mac_register(struct ath10k *ar)
+ 			BIT(NL80211_IFTYPE_P2P_CLIENT) |
+ 			BIT(NL80211_IFTYPE_P2P_GO);
+ 
++	if (ath10k_no_auto_vif)
++		ieee80211_hw_set(ar->hw, NO_AUTO_VIF);
++
+ 	ieee80211_hw_set(ar->hw, SIGNAL_DBM);
+ 
+ 	if (!test_bit(ATH10K_FW_FEATURE_NO_PS,
+-- 
+2.20.1
+

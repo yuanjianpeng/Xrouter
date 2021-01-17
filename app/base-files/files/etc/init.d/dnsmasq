@@ -1,0 +1,15 @@
+#!/bin/sh /etc/rc.common
+# START=21
+
+boot () {
+	mkdir -p /run/dnsmasq/
+	start
+}
+
+start () {
+	dnsmasq -x /run/dnsmasq/dnsmasq.pid -C /etc/dnsmasq/dnsmasq.conf
+}
+
+stop () {
+	stop_prog /sbin/dnsmasq /run/dnsmasq/dnsmasq.pid
+}

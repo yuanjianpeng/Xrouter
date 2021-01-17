@@ -1,0 +1,24 @@
+From ef1c36e795ae8c40048e377c5378d17b19bddb3e Mon Sep 17 00:00:00 2001
+From: Yuan Jianpeng <yuanjp89@163.com>
+Date: Sun, 6 Dec 2020 16:35:36 +0800
+Subject: [PATCH] delete ldconfig action when install
+
+---
+ iptables/Makefile.in | 1 -
+ 1 file changed, 1 deletion(-)
+
+diff --git a/iptables/Makefile.in b/iptables/Makefile.in
+index ee429b3..6579a0a 100644
+--- a/iptables/Makefile.in
++++ b/iptables/Makefile.in
+@@ -1431,7 +1431,6 @@ iptables-translate.8 ip6tables-translate.8 iptables-restore-translate.8 ip6table
+ 
+ # Using if..fi avoids an ugly "error (ignored)" message :)
+ install-exec-hook:
+-	-if test -z "${DESTDIR}"; then /sbin/ldconfig; fi;
+ 	${INSTALL} -dm0755 "${DESTDIR}${bindir}";
+ 	for i in ${vx_bin_links}; do ${LN_S} -f "${sbindir}/xtables-legacy-multi" "${DESTDIR}${bindir}/$$i"; done;
+ 	for i in ${v4_sbin_links}; do ${LN_S} -f xtables-legacy-multi "${DESTDIR}${sbindir}/$$i"; done;
+-- 
+2.25.1
+

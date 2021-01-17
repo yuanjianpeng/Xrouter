@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+	<title>Xrouter</title>
+	<script type="text/javascript" src="/js/jquery-3.4.1.min.js"></script>
+	<script type="text/javascript" src="/js/base.js"></script>
+	<script type="text/javascript" src="/js/network.js"></script>
+	<style>
+		.header
+		{
+			display: inline-block;
+			width: 100px;
+		}
+		.div_seg
+		{
+			margin: 20px 0 5px 0;
+		}
+		.div_ent
+		{
+			margin: 6px 0;
+		}
+		a
+		{
+			text-decoration: none;
+			margin: 5px 10px;
+		}
+	</style>
+</head>
+<body style="padding:0 0px;">
+	<div>
+		<a href="/">Home</a>
+		<a href="/mode.htm">Mode</a>
+		<a>WAN</a>
+		<a href="/lan.htm">LAN</a>
+		<a href="/dhcp.htm">DHCP</a>
+		<a href="/wifi_2g.htm">WiFi 2.4G</a>
+		<a href="/wifi_5g.htm">WiFi 5G</a>
+	</div>
+	<h1>WAN</h1>
+	<div class="div_ent">
+		<span class="header">Protocol</span>
+		<select id="sel_wan_proto">
+			<option value="none">None</option>
+			<option value="static">Static</option>
+			<option value="dhcp">DHCP</option>
+			<option value="pppoe">PPPoE</option>
+		</select>
+	</div>
+	<div id="wan_static" style="display: none">
+		<div class="div_ent">
+			<span class="header">IP</span>
+			<input type=text id="ipt_ip" />
+		</div>
+		<div class="div_ent">
+			<span class="header">Netmask</span>
+			<input type=text id="ipt_netmask" />
+		</div>
+		<div class="div_ent">
+			<span class="header">Gateway</span>
+			<input type=text id="ipt_gateway" />
+		</div>
+	</div>
+	<div id="wan_pppoe" style="display: none">
+		<div class="div_ent">
+			<span class="header">User</span>
+			<input type=text id="ipt_user" />
+		</div>
+		<div class="div_ent">
+			<span class="header">Password</span>
+			<input type=text id="ipt_password" />
+		</div>
+	</div>
+	<div id="wan_other" style="display: none">
+		<div class="div_ent">
+			<span class="header">DNS</span>
+			<input type=text id="ipt_dns1" />
+		</div>
+		<div class="div_ent">
+			<span class="header"></span>
+			<input type=text id="ipt_dns2" />
+		</div>
+		<div class="div_ent">
+			<span class="header">NAT</span>
+			<input type="checkbox" id="chb_nat" />
+		</div>
+		<div class="div_ent">
+			<span class="header">MTU</span>
+			<input type=text id="ipt_mtu" />
+			<input type=text id="ipt_mtu_pppoe" />
+		</div>
+	</div>
+	<div class="div_seg">
+		<span class="header"></span>
+		<input type=button value="commit" id="btn_wan" />
+	</div>
+	<script>
+		$(document).ready(init_wan);
+	</script>
+</body>
+</html>
+

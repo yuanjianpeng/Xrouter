@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+	<title>Xrouter</title>
+	<script type="text/javascript" src="/js/jquery-3.4.1.min.js"></script>
+	<script type="text/javascript" src="/js/base.js"></script>
+	<script type="text/javascript" src="/js/network.js"></script>
+	<style>
+		.header
+		{
+			display: inline-block;
+			width: 100px;
+		}
+		.div_seg
+		{
+			margin: 20px 0 5px 0;
+		}
+		.div_ent
+		{
+			margin: 6px 0;
+		}
+		a
+		{
+			text-decoration: none;
+			margin: 5px 10px;
+		}
+	</style>
+</head>
+<body style="padding:0 0px;">
+	<div>
+		<a href="/">Home</a>
+		<a href="/mode.htm">Mode</a>
+		<a href="/wan.htm">WAN</a>
+		<a href="/lan.htm">LAN</a>
+		<a href="/dhcp.htm">DHCP</a>
+		<a>WiFi 2.4G</a>
+		<a href="/wifi_5g.htm">WiFi 5G</a>
+	</div>
+	<h1>WiFi 2.4G</h1>
+	<div class="div_ent">
+		<span class="header">Enable</span>
+		<input type=checkbox id="chb_enable" />
+	</div>
+	<div class="div_ent">
+		<span class="header">SSID</span>
+		<input type=text id="ipt_ssid" />
+	</div>
+	<div class="div_ent">
+		<span class="header">Encryption</span>
+		<select id="sel_enc">
+			<option value="none">None</option>
+			<option value="WPA-PSK-CCMP">WPA2PSK CCMP</option>
+			<option value="WPA-WPA2-PSK-CCMP">WPAWPA2PSK CCMP</option>
+		</select>
+	</div>
+	<div class="div_ent">
+		<span class="header">Password</span>
+		<input type=text id="ipt_psk" />
+	</div>
+	<div class="div_ent">
+		<span class="header">Bandwidth</span>
+		<select id="sel_bw">
+			<option value="auto">Auto</option>
+			<option value="20M">20M</option>
+			<option value="40M">40M</option>
+		</select>
+	</div>
+	<div class="div_ent">
+		<span class="header">Channel</span>
+		<select id="sel_ch">
+			<option value="auto">Auto</option>
+			<option value="1">1</option>
+			<option value="2">2</option>
+			<option value="3">3</option>
+			<option value="4">4</option>
+			<option value="5">5</option>
+			<option value="6">6</option>
+			<option value="7">7</option>
+			<option value="8">8</option>
+			<option value="9">9</option>
+			<option value="10">10</option>
+			<option value="11">11</option>
+			<option value="12">12</option>
+			<option value="13">13</option>
+		</select>
+	</div>
+	<div class="div_ent">
+		<span class="header">Tx Power</span>
+		<input type=text id="ipt_txpower" />
+	</div>
+	<div class="div_seg">
+		<span class="header"></span>
+		<input type=button value="commit" id="btn_wifi" />
+	</div>
+	<script>
+		$(document).ready(function () {
+			init_wifi("2g"); 
+		});
+	</script>
+</body>
+</html>
+

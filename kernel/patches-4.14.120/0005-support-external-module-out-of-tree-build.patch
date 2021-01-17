@@ -1,0 +1,59 @@
+From ecf264762d52409c00f92a2442fdf19fa6cd4afc Mon Sep 17 00:00:00 2001
+From: Yuan Jianpeng <yuanjianpeng@360.cn>
+Date: Sun, 8 Mar 2020 03:29:03 +0800
+Subject: [PATCH] support external module out of tree build
+
+---
+ scripts/Makefile.build   | 2 +-
+ scripts/Makefile.clean   | 2 +-
+ scripts/Makefile.modpost | 6 +++---
+ 3 files changed, 5 insertions(+), 5 deletions(-)
+
+diff --git a/scripts/Makefile.build b/scripts/Makefile.build
+index e0e47e90..463b7584 100644
+--- a/scripts/Makefile.build
++++ b/scripts/Makefile.build
+@@ -3,7 +3,7 @@
+ # Building
+ # ==========================================================================
+ 
+-src := $(obj)
++src := $(if $(KBUILD_EXTMOD_SRC),$(KBUILD_EXTMOD_SRC)$(patsubst $(KBUILD_EXTMOD)%,%,$(obj)),$(obj))
+ 
+ PHONY := __build
+ __build:
+diff --git a/scripts/Makefile.clean b/scripts/Makefile.clean
+index 808d09f2..383160f5 100644
+--- a/scripts/Makefile.clean
++++ b/scripts/Makefile.clean
+@@ -3,7 +3,7 @@
+ # Cleaning up
+ # ==========================================================================
+ 
+-src := $(obj)
++src := $(if $(KBUILD_EXTMOD_SRC),$(KBUILD_EXTMOD_SRC)$(patsubst $(KBUILD_EXTMOD)%,%,$(obj)),$(obj))
+ 
+ PHONY := __clean
+ __clean:
+diff --git a/scripts/Makefile.modpost b/scripts/Makefile.modpost
+index 991db7d6..244e8e45 100644
+--- a/scripts/Makefile.modpost
++++ b/scripts/Makefile.modpost
+@@ -48,11 +48,11 @@ ifneq ($(KBUILD_EXTMOD),)
+ 
+ # set src + obj - they may be used when building the .mod.c file
+ obj := $(KBUILD_EXTMOD)
+-src := $(obj)
++src := $(if $(KBUILD_EXTMOD_SRC),$(KBUILD_EXTMOD_SRC),$(obj))
+ 
+ # Include the module's Makefile to find KBUILD_EXTRA_SYMBOLS
+-include $(if $(wildcard $(KBUILD_EXTMOD)/Kbuild), \
+-             $(KBUILD_EXTMOD)/Kbuild, $(KBUILD_EXTMOD)/Makefile)
++include $(if $(wildcard $(src)/Kbuild), \
++             $(src)/Kbuild, $(src)/Makefile)
+ endif
+ 
+ include scripts/Makefile.lib
+-- 
+2.20.1
+

@@ -1,0 +1,88 @@
+From 7e0b1ed88470231166e0c398c298c2ddbaf342d0 Mon Sep 17 00:00:00 2001
+From: Yuan Jianpeng <yuanjp89@163.com>
+Date: Wed, 21 Oct 2020 23:35:34 +0800
+Subject: [PATCH] add out of tree build support
+
+---
+ wpa_supplicant/Makefile | 27 +++++++++++++++------------
+ 1 file changed, 15 insertions(+), 12 deletions(-)
+
+diff --git a/wpa_supplicant/Makefile b/wpa_supplicant/Makefile
+index f1384d5..3616364 100644
+--- a/wpa_supplicant/Makefile
++++ b/wpa_supplicant/Makefile
+@@ -26,7 +26,7 @@ CFLAGS += $(EXTRA_CFLAGS)
+ CFLAGS += -I$(abspath ../src)
+ CFLAGS += -I$(abspath ../src/utils)
+ 
+--include .config
++include $(O).config
+ 
+ ifndef CONFIG_NO_GITVER
+ # Add VERSION_STR postfix for builds from a git repository
+@@ -61,7 +61,7 @@ ALL += libwpa_client.so
+ endif
+ 
+ 
+-all: verify_config $(ALL) dynamic_eap_methods
++all: $(if $(O),,verify_config) $(addprefix $(O),$(ALL)) dynamic_eap_methods
+ 
+ verify_config:
+ 	@if [ ! -r .config ]; then \
+@@ -1897,10 +1897,10 @@ wpa_priv: $(BCHECK) $(OBJS_priv)
+ 	$(Q)$(LDO) $(LDFLAGS) -o wpa_priv $(OBJS_priv) $(LIBS)
+ 	@$(E) "  LD " $@
+ 
+-$(OBJS_c) $(OBJS_t) $(OBJS_t2) $(OBJS) $(BCHECK) $(EXTRA_progs): .config
++$(OBJS_c) $(OBJS_t) $(OBJS_t2) $(OBJS) $(BCHECK) $(EXTRA_progs): $(O).config
+ 
+-wpa_supplicant: $(BCHECK) $(OBJS) $(EXTRA_progs)
+-	$(Q)$(LDO) $(LDFLAGS) -o wpa_supplicant $(OBJS) $(LIBS) $(EXTRALIBS)
++$(O)wpa_supplicant: $(BCHECK) $(addprefix $(O),$(OBJS)) $(EXTRA_progs)
++	$(Q)$(LDO) $(LDFLAGS) -o $@ $(addprefix $(O), $(OBJS)) $(LIBS) $(EXTRALIBS)
+ 	@$(E) "  LD " $@
+ 
+ eapol_test: $(OBJS_t)
+@@ -1911,12 +1911,12 @@ preauth_test: $(OBJS_t2)
+ 	$(Q)$(LDO) $(LDFLAGS) -o preauth_test $(OBJS_t2) $(LIBS)
+ 	@$(E) "  LD " $@
+ 
+-wpa_passphrase: $(OBJS_p)
+-	$(Q)$(LDO) $(LDFLAGS) -o wpa_passphrase $(OBJS_p) $(LIBS_p) $(LIBS)
++$(O)wpa_passphrase: $(addprefix $(O),$(OBJS_p))
++	$(Q)$(LDO) $(LDFLAGS) -o $@ $(addprefix $(O),$(OBJS_p)) $(LIBS_p) $(LIBS)
+ 	@$(E) "  LD " $@
+ 
+-wpa_cli: $(OBJS_c)
+-	$(Q)$(LDO) $(LDFLAGS) -o wpa_cli $(OBJS_c) $(LIBS_c)
++$(O)wpa_cli: $(addprefix $(O),$(OBJS_c))
++	$(Q)$(LDO) $(LDFLAGS) -o $@ $(addprefix $(O),$(OBJS_c)) $(LIBS_c)
+ 	@$(E) "  LD " $@
+ 
+ LIBCTRL += ../src/common/wpa_ctrl.o
+@@ -1986,16 +1986,19 @@ ifdef CONFIG_CODE_COVERAGE
+ 	@$(E) "  CC " $<
+ 	$(Q)cd $(dir $@); $(CC) -c -o $(notdir $@) $(CFLAGS) $(notdir $<)
+ else
+-%.o: %.c
++$(O)%.o: %.c
++	$(Q)[ -d "$(dir $@)" ] || mkdir -p "$(dir $@)"
+ 	$(Q)$(CC) -c -o $@ $(CFLAGS) $<
+ 	@$(E) "  CC " $<
+ endif
+ 
+-%.service: %.service.in
++$(O)%.service: %.service.in
++	$(Q)[ -d "$(dir $@)" ] || mkdir -p "$(dir $@)"
+ 	$(Q)sed -e 's|\@BINDIR\@|$(BINDIR)|g' $< >$@
+ 	@$(E) "  sed" $<
+ 
+-%@.service: %.service.arg.in
++$(O)%@.service: %.service.arg.in
++	$(Q)[ -d "$(dir $@)" ] || mkdir -p "$(dir $@)"
+ 	$(Q)sed -e 's|\@BINDIR\@|$(BINDIR)|g' $< >$@
+ 	@$(E) "  sed" $<
+ 
+-- 
+2.25.1
+

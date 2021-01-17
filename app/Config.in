@@ -1,0 +1,199 @@
+
+menu "App options"
+
+menuconfig BUSYBOX
+	bool "busybox"
+	default y
+
+config BUSYBOX_VER
+	string "version"
+	default "1.31.1"
+	depends on BUSYBOX
+
+menuconfig LIBMNL
+	bool "libmnl"
+	default y
+
+config LIBMNL_VER
+	string "version"
+	default "1.0.4"
+	depends on LIBMNL
+
+menuconfig LIBNFTNL
+	bool "libnftnl"
+	default y
+	select LIBMNL
+
+config LIBNFTNL_VER
+	string "version"
+	default "1.1.5"
+	depends on LIBNFTNL
+
+menuconfig LIBNL
+	bool "libnl"
+	default y
+
+config LIBNL_VER
+	string "version"
+	default "3.2.25"
+	depends on LIBNL
+
+menuconfig DNSMASQ
+	bool "dnsmasq"
+	default y
+
+config DNSMASQ_VER
+	string "version"
+	default "2.80"
+	depends on DNSMASQ
+
+menuconfig BOA
+	bool "boa"
+	default y
+
+config BOA_VER
+	string "version"
+	default "debian-0.94.14rc21-5"
+	depends on BOA
+
+
+menuconfig IPTABLES
+	bool "iptables"
+	default y
+
+config IPTABLES_VER
+	string "version"
+	default "1.8.4"
+	depends on IPTABLES
+
+menuconfig NFTABLES
+	bool "nftables"
+	default y
+	select LIBMNL
+	select LIBNFTNL
+
+config NFTABLES_VER
+	string "version"
+	default "0.9.3"
+	depends on NFTABLES
+
+menuconfig LIBPCAP
+	bool "libpcap"
+	default n
+
+config LIBPCAP_VER
+	string "version"
+	default "1.9.1"
+	depends on LIBPCAP
+
+menuconfig TCPDUMP
+	bool "tcpdump"
+	default y
+	select LIBPCAP
+
+config TCPDUMP_VER
+	string "version"
+	default "4.9.3"
+	depends on TCPDUMP
+
+menuconfig IW
+	bool "iw"
+	default y
+	select LIBNL
+
+config IW_VER
+	string "version"
+	default "5.0.1"
+	depends on IW
+
+menuconfig MAC80211
+	bool "mac80211"
+	default y
+
+config MAC80211_VER
+	string "backports version"
+	default "4.19.32-1"
+	depends on MAC80211
+
+menuconfig ATH10K_CT
+	bool "ath10k-ct"
+
+config ATH10K_CT_VER
+	string "version"
+	default "2019-05-08-f98b6dc4"
+	depends on ATH10K_CT
+
+config ATH10K_CT_CTVER
+	string "kernel version"
+	depends on ATH10K_CT
+
+menuconfig HOSTAPD
+	bool "hostapd"
+	default y
+	select LIBNL
+
+config HOSTAPD_VER
+	string "version"
+	default "2.9"
+	depends on HOSTAPD
+
+menuconfig WPA_SUPPLICANT
+	bool "wpa_supplicant"
+	default y
+
+menuconfig WPA_SUPPLICANT_VER
+	string "version"
+	default "2.9"
+	depends on WPA_SUPPLICANT
+	
+menu "Xrouter App"
+
+config LIBBASE
+	bool "libbase"
+	default y
+
+config LOG
+	bool "log"
+	select LIBBASE
+	default y
+
+config CONFIG
+	bool "config"
+	select LIBBASE
+	select LOG
+	default y
+
+config XBUS
+	bool "xbus"
+	select LIBBASE
+	default y
+
+config UTILS
+	bool "utils"
+	select LIBBASE
+	default y
+
+config NETMAN
+	bool "netman"
+	select LIBBASE
+	select LOG
+	select CONFIG
+	select XBUS
+	default y
+
+config SWITCH
+	bool "switch"
+	select LIBBASE
+	select LOG
+
+config WEBCGI
+	bool "webcgi"
+	select LIBBASE
+	select SWITCH
+	select LOG
+	select CONFIG
+	
+endmenu
+
+endmenu
+

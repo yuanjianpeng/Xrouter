@@ -1,0 +1,36 @@
+From dd0627fb579e3a82764aae287465019e4e3c3153 Mon Sep 17 00:00:00 2001
+From: Yuan Jianpeng <yuanjp89@163.com>
+Date: Sat, 24 Oct 2020 00:33:52 +0800
+Subject: [PATCH] disable build man verbose warning message
+
+---
+ extensions/GNUmakefile.in | 3 ---
+ 1 file changed, 3 deletions(-)
+
+diff --git a/extensions/GNUmakefile.in b/extensions/GNUmakefile.in
+index 0842a55..e424113 100644
+--- a/extensions/GNUmakefile.in
++++ b/extensions/GNUmakefile.in
+@@ -269,19 +269,16 @@ man_run    = \
+ 	for ext in $(sort ${1}); do \
+ 		f="${srcdir}/libxt_$$ext.man"; \
+ 		if [ -f "$$f" ]; then \
+-			echo -e "\t+ $$f" >&2; \
+ 			echo ".SS $$ext"; \
+ 			cat "$$f" || exit $$?; \
+ 		fi; \
+ 		f="${srcdir}/libip6t_$$ext.man"; \
+ 		if [ -f "$$f" ]; then \
+-			echo -e "\t+ $$f" >&2; \
+ 			echo ".SS $$ext (IPv6-specific)"; \
+ 			cat "$$f" || exit $$?; \
+ 		fi; \
+ 		f="${srcdir}/libipt_$$ext.man"; \
+ 		if [ -f "$$f" ]; then \
+-			echo -e "\t+ $$f" >&2; \
+ 			echo ".SS $$ext (IPv4-specific)"; \
+ 			cat "$$f" || exit $$?; \
+ 		fi; \
+-- 
+2.25.1
+

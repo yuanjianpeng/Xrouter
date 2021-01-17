@@ -1,0 +1,2043 @@
+From 41d8ed9f62827ba9a6c1038d826b890326dbbc0c Mon Sep 17 00:00:00 2001
+From: Yuan Jianpeng <yuanjianpeng@360.cn>
+Date: Sat, 7 Mar 2020 21:17:59 +0800
+Subject: [PATCH] add openwrt patch
+
+---
+ ath10k-4.13/Kconfig    |   9 ++-
+ ath10k-4.13/Makefile   |   2 +-
+ ath10k-4.13/core.c     | 172 +++++++++++++++++++++++++----------------
+ ath10k-4.13/spectral.h |   4 +-
+ ath10k-4.13/wmi.c      |   2 +-
+ ath10k-4.16/Kconfig    |  10 +++
+ ath10k-4.16/Makefile   |   1 +
+ ath10k-4.16/core.c     | 155 ++++++++++++++++++++++---------------
+ ath10k-4.16/core.h     |  12 +++
+ ath10k-4.16/hw.h       |   1 +
+ ath10k-4.16/leds.c     | 101 ++++++++++++++++++++++++
+ ath10k-4.16/leds.h     |  41 ++++++++++
+ ath10k-4.16/mac.c      |   3 +-
+ ath10k-4.16/wmi-ops.h  |  32 ++++++++
+ ath10k-4.16/wmi-tlv.c  |   2 +
+ ath10k-4.16/wmi.c      |  56 +++++++++++++-
+ ath10k-4.16/wmi.h      |  35 +++++++++
+ ath10k-4.19/Kconfig    |  10 +++
+ ath10k-4.19/Makefile   |   1 +
+ ath10k-4.19/core.c     |  21 +++++
+ ath10k-4.19/core.h     |  13 +++-
+ ath10k-4.19/hw.h       |   1 +
+ ath10k-4.19/leds.c     | 101 ++++++++++++++++++++++++
+ ath10k-4.19/leds.h     |  41 ++++++++++
+ ath10k-4.19/mac.c      |  59 +++++++++++++-
+ ath10k-4.19/wmi-ops.h  |  32 ++++++++
+ ath10k-4.19/wmi-tlv.c  |   2 +
+ ath10k-4.19/wmi.c      |  54 +++++++++++++
+ ath10k-4.19/wmi.h      |  35 +++++++++
+ ath10k/debug.c         |  12 +--
+ ath10k/htt_rx.c        |  49 ++++++------
+ ath10k/mac.c           |  10 +--
+ ath10k/thermal.c       |   2 +-
+ ath10k/wmi.c           |   2 +-
+ 34 files changed, 904 insertions(+), 179 deletions(-)
+ create mode 100644 ath10k-4.16/leds.c
+ create mode 100644 ath10k-4.16/leds.h
+ create mode 100644 ath10k-4.19/leds.c
+ create mode 100644 ath10k-4.19/leds.h
+
+diff --git a/ath10k-4.13/Kconfig b/ath10k-4.13/Kconfig
+index 412eb13..baa1713 100644
+--- a/ath10k-4.13/Kconfig
++++ b/ath10k-4.13/Kconfig
+@@ -40,12 +40,19 @@ config ATH10K_DEBUG
+ config ATH10K_DEBUGFS
+ 	bool "Atheros ath10k debugfs support"
+ 	depends on ATH10K && DEBUG_FS
+-	select RELAY
+ 	---help---
+ 	  Enabled debugfs support
+ 
+ 	  If unsure, say Y to make it easier to debug problems.
+ 
++config ATH10K_SPECTRAL
++	bool "Atheros ath10k spectral scan support"
++	depends on ATH10K_DEBUGFS
++	select RELAY
++	default n
++	---help---
++	  Say Y to enable access to the FFT/spectral data via debugfs.
++
+ config ATH10K_TRACING
+ 	bool "Atheros ath10k tracing support"
+ 	depends on ATH10K
+diff --git a/ath10k-4.13/Makefile b/ath10k-4.13/Makefile
+index b0b19a7..bcf0dad 100644
+--- a/ath10k-4.13/Makefile
++++ b/ath10k-4.13/Makefile
+@@ -14,7 +14,7 @@ ath10k_core-y += mac.o \
+ 		 p2p.o \
+ 		 swap.o
+ 
+-ath10k_core-$(CONFIG_ATH10K_DEBUGFS) += spectral.o
++ath10k_core-$(CONFIG_ATH10K_SPECTRAL) += spectral.o
+ ath10k_core-$(CONFIG_NL80211_TESTMODE) += testmode.o
+ ath10k_core-$(CONFIG_ATH10K_TRACING) += trace.o
+ ath10k_core-$(CONFIG_THERMAL) += thermal.o
+diff --git a/ath10k-4.13/core.c b/ath10k-4.13/core.c
+index e296146..4e0b658 100644
+--- a/ath10k-4.13/core.c
++++ b/ath10k-4.13/core.c
+@@ -893,6 +893,28 @@ static int ath10k_core_check_smbios(struct ath10k *ar)
+ 	return 0;
+ }
+ 
++static int ath10k_core_check_dt(struct ath10k *ar)
++{
++	struct device_node *node;
++	const char *variant = NULL;
++
++	node = ar->dev->of_node;
++	if (!node)
++		return -ENOENT;
++
++	of_property_read_string(node, "qcom,ath10k-calibration-variant",
++				&variant);
++	if (!variant)
++		return -ENODATA;
++
++	if (strscpy(ar->id.bdf_ext, variant, sizeof(ar->id.bdf_ext)) < 0)
++		ath10k_dbg(ar, ATH10K_DBG_BOOT,
++			   "bdf variant string is longer than the buffer can accommodate (variant: %s)\n",
++			    variant);
++
++	return 0;
++}
++
+ static int ath10k_download_and_run_otp(struct ath10k *ar)
+ {
+ 	u32 result, address = ar->hw_params.patch_load_addr;
+@@ -1407,14 +1429,61 @@ out:
+ 	return ret;
+ }
+ 
++static int ath10k_core_search_bd(struct ath10k *ar,
++				 const char *boardname,
++				 const u8 *data,
++				 size_t len)
++{
++	size_t ie_len;
++	struct ath10k_fw_ie *hdr;
++	int ret = -ENOENT, ie_id;
++
++	while (len > sizeof(struct ath10k_fw_ie)) {
++		hdr = (struct ath10k_fw_ie *)data;
++		ie_id = le32_to_cpu(hdr->id);
++		ie_len = le32_to_cpu(hdr->len);
++
++		len -= sizeof(*hdr);
++		data = hdr->data;
++
++		if (len < ALIGN(ie_len, 4)) {
++			ath10k_err(ar, "invalid length for board ie_id %d ie_len %zu len %zu\n",
++				   ie_id, ie_len, len);
++			return -EINVAL;
++		}
++
++		switch (ie_id) {
++		case ATH10K_BD_IE_BOARD:
++			ret = ath10k_core_parse_bd_ie_board(ar, data, ie_len,
++							    boardname);
++			if (ret == -ENOENT)
++				/* no match found, continue */
++				break;
++
++			/* either found or error, so stop searching */
++			goto out;
++		}
++
++		/* jump over the padding */
++		ie_len = ALIGN(ie_len, 4);
++
++		len -= ie_len;
++		data += ie_len;
++	}
++
++out:
++	/* return result of parse_bd_ie_board() or -ENOENT */
++	return ret;
++}
++
+ static int ath10k_core_fetch_board_data_api_n(struct ath10k *ar,
+ 					      const char *boardname,
++					      const char *fallback_boardname,
+ 					      const char *filename)
+ {
+-	size_t len, magic_len, ie_len;
+-	struct ath10k_fw_ie *hdr;
++	size_t len, magic_len;
+ 	const u8 *data;
+-	int ret, ie_id;
++	int ret;
+ 
+ 	ar->normal_mode_fw.board = ath10k_fetch_fw_file(ar,
+ 							ar->hw_params.fw.dir,
+@@ -1452,73 +1521,28 @@ static int ath10k_core_fetch_board_data_api_n(struct ath10k *ar,
+ 	data += magic_len;
+ 	len -= magic_len;
+ 
+-	while (len > sizeof(struct ath10k_fw_ie)) {
+-		hdr = (struct ath10k_fw_ie *)data;
+-		ie_id = le32_to_cpu(hdr->id);
+-		ie_len = le32_to_cpu(hdr->len);
+-
+-		len -= sizeof(*hdr);
+-		data = hdr->data;
+-
+-		if (len < ALIGN(ie_len, 4)) {
+-			ath10k_err(ar, "invalid length for board ie_id %d ie_len %zu len %zu\n",
+-				   ie_id, ie_len, len);
+-			ret = -EINVAL;
+-			goto err;
+-		}
+-
+-		switch (ie_id) {
+-		case ATH10K_BD_IE_BOARD:
+-			ret = ath10k_core_parse_bd_ie_board(ar, data, ie_len,
+-							    boardname);
+-			if (ret == -ENOENT && ar->id.bdf_ext[0] != '\0') {
+-				/* try default bdf if variant was not found */
+-				char *s, *v = ",variant=";
+-				char boardname2[100];
+-
+-				strlcpy(boardname2, boardname,
+-					sizeof(boardname2));
+-
+-				s = strstr(boardname2, v);
+-				if (s)
+-					*s = '\0';  /* strip ",variant=%s" */
+-
+-				ret = ath10k_core_parse_bd_ie_board(ar, data,
+-								    ie_len,
+-								    boardname2);
+-			}
+-
+-			if (ret == -ENOENT)
+-				/* no match found, continue */
+-				break;
+-			else if (ret)
+-				/* there was an error, bail out */
+-				goto err;
+-
+-			/* board data found */
+-			goto out;
+-		}
+-
+-		/* jump over the padding */
+-		ie_len = ALIGN(ie_len, 4);
++	/* attempt to find boardname in the IE list */
++	ret = ath10k_core_search_bd(ar, boardname, data, len);
+ 
+-		len -= ie_len;
+-		data += ie_len;
+-	}
++	/* if we didn't find it and have a fallback name, try that */
++	if (ret == -ENOENT && fallback_boardname)
++		ret = ath10k_core_search_bd(ar, fallback_boardname, data, len);
+ 
+ out:
+-	if (!ar->normal_mode_fw.board_data || !ar->normal_mode_fw.board_len) {
++	if (ret == -ENOENT) {
+ 		ath10k_err(ar,
+ 			   "failed to fetch board data for %s from %s/%s\n",
+ 			   boardname, ar->hw_params.fw.dir, filename);
+ 		ret = -ENODATA;
+-		goto err;
+ 	}
+ 
+ 	/* Save firmware board name so we can display it later. */
+ 	strlcpy(ar->normal_mode_fw.fw_file.fw_board_name, filename,
+ 		sizeof(ar->normal_mode_fw.fw_file.fw_board_name));
+ 
++	if (ret)
++		goto err;
++
+ 	return 0;
+ 
+ err:
+@@ -1527,24 +1551,24 @@ err:
+ }
+ 
+ static int ath10k_core_create_board_name(struct ath10k *ar, char *name,
+-					 size_t name_len)
++					 size_t name_len, bool with_variant)
+ {
+ 	/* strlen(',variant=') + strlen(ar->id.bdf_ext) */
+ 	char variant[9 + ATH10K_SMBIOS_BDF_EXT_STR_LENGTH] = { 0 };
+ 
++	if (with_variant && ar->id.bdf_ext[0] != '\0')
++		scnprintf(variant, sizeof(variant), ",variant=%s",
++			  ar->id.bdf_ext);
++
+ 	if (ar->id.bmi_ids_valid) {
+ 		scnprintf(name, name_len,
+-			  "bus=%s,bmi-chip-id=%d,bmi-board-id=%d",
++			  "bus=%s,bmi-chip-id=%d,bmi-board-id=%d%s",
+ 			  ath10k_bus_str(ar->hif.bus),
+ 			  ar->id.bmi_chip_id,
+-			  ar->id.bmi_board_id);
++			  ar->id.bmi_board_id, variant);
+ 		goto out;
+ 	}
+ 
+-	if (ar->id.bdf_ext[0] != '\0')
+-		scnprintf(variant, sizeof(variant), ",variant=%s",
+-			  ar->id.bdf_ext);
+-
+ 	scnprintf(name, name_len,
+ 		  "bus=%s,vendor=%04x,device=%04x,subsystem-vendor=%04x,subsystem-device=%04x%s",
+ 		  ath10k_bus_str(ar->hif.bus),
+@@ -1558,21 +1582,31 @@ out:
+ 
+ static int ath10k_core_fetch_board_file(struct ath10k *ar)
+ {
+-	char boardname[100];
++	char boardname[100], fallback_boardname[100];
+ 	int ret;
+ 
+-	ret = ath10k_core_create_board_name(ar, boardname, sizeof(boardname));
++	ret = ath10k_core_create_board_name(ar, boardname,
++					    sizeof(boardname), true);
+ 	if (ret) {
+ 		ath10k_err(ar, "failed to create board name: %d", ret);
+ 		return ret;
+ 	}
+ 
++	ret = ath10k_core_create_board_name(ar, fallback_boardname,
++					    sizeof(boardname), false);
++	if (ret) {
++		ath10k_err(ar, "failed to create fallback board name: %d", ret);
++		return ret;
++	}
++
+ 	ar->bd_api = 2;
+ 	if (ar->fwcfg.bname[0])
+ 		ret = ath10k_core_fetch_board_data_api_n(ar, boardname,
++							 fallback_boardname,
+ 							 ar->fwcfg.bname);
+ 	else
+ 		ret = ath10k_core_fetch_board_data_api_n(ar, boardname,
++							 fallback_boardname,
+ 							 ATH10K_BOARD_API2_FILE);
+ 	if (!ret)
+ 		goto success;
+@@ -3014,7 +3048,11 @@ static int ath10k_core_probe_fw(struct ath10k *ar)
+ 
+ 	ret = ath10k_core_check_smbios(ar);
+ 	if (ret)
+-		ath10k_dbg(ar, ATH10K_DBG_BOOT, "bdf variant name not set.\n");
++		ath10k_dbg(ar, ATH10K_DBG_BOOT, "SMBIOS bdf variant name not set.\n");
++
++	ret = ath10k_core_check_dt(ar);
++	if (ret)
++		ath10k_dbg(ar, ATH10K_DBG_BOOT, "DT bdf variant name not set.\n");
+ 
+ 	ret = ath10k_core_fetch_board_file(ar);
+ 	if (ret) {
+diff --git a/ath10k-4.13/spectral.h b/ath10k-4.13/spectral.h
+index 89b0ad7..b2a2e8a 100644
+--- a/ath10k-4.13/spectral.h
++++ b/ath10k-4.13/spectral.h
+@@ -44,7 +44,7 @@ enum ath10k_spectral_mode {
+ 	SPECTRAL_MANUAL,
+ };
+ 
+-#ifdef CONFIG_ATH10K_DEBUGFS
++#ifdef CONFIG_ATH10K_SPECTRAL
+ 
+ int ath10k_spectral_process_fft(struct ath10k *ar,
+ 				struct wmi_phyerr_ev_arg *phyerr,
+@@ -85,6 +85,6 @@ static inline void ath10k_spectral_destroy(struct ath10k *ar)
+ {
+ }
+ 
+-#endif /* CONFIG_ATH10K_DEBUGFS */
++#endif /* CONFIG_ATH10K_SPECTRAL */
+ 
+ #endif /* SPECTRAL_H */
+diff --git a/ath10k-4.13/wmi.c b/ath10k-4.13/wmi.c
+index a9c95b0..346f2f7 100644
+--- a/ath10k-4.13/wmi.c
++++ b/ath10k-4.13/wmi.c
+@@ -4033,7 +4033,7 @@ static void ath10k_dfs_radar_report(struct ath10k *ar,
+ 
+ 	ATH10K_DFS_STAT_INC(ar, pulses_detected);
+ 
+-	if (!ar->dfs_detector->add_pulse(ar->dfs_detector, &pe)) {
++	if (!ar->dfs_detector->add_pulse(ar->dfs_detector, &pe, NULL)) {
+ 		ath10k_dbg(ar, ATH10K_DBG_REGULATORY,
+ 			   "dfs no pulse pattern detected, yet\n");
+ 		return;
+diff --git a/ath10k-4.16/Kconfig b/ath10k-4.16/Kconfig
+index deb5ae2..4b71963 100644
+--- a/ath10k-4.16/Kconfig
++++ b/ath10k-4.16/Kconfig
+@@ -60,6 +60,16 @@ config ATH10K_SPECTRAL
+ 	---help---
+ 	  Say Y to enable access to the FFT/spectral data via debugfs.
+ 
++config ATH10K_LEDS
++	bool "Atheros ath10k LED support"
++	depends on ATH10K
++	select MAC80211_LEDS
++	select LEDS_CLASS
++	select NEW_LEDS
++	default y
++	---help---
++	  This option is necessary, if you want LED support for chipset connected led pins. If unsure, say N.
++
+ config ATH10K_TRACING
+ 	bool "Atheros ath10k tracing support"
+ 	depends on ATH10K
+diff --git a/ath10k-4.16/Makefile b/ath10k-4.16/Makefile
+index 6739ac2..b28be50 100644
+--- a/ath10k-4.16/Makefile
++++ b/ath10k-4.16/Makefile
+@@ -19,6 +19,7 @@ ath10k_core-$(CONFIG_ATH10K_SPECTRAL) += spectral.o
+ ath10k_core-$(CONFIG_NL80211_TESTMODE) += testmode.o
+ ath10k_core-$(CONFIG_ATH10K_TRACING) += trace.o
+ ath10k_core-$(CONFIG_THERMAL) += thermal.o
++ath10k_core-$(CONFIG_ATH10K_LEDS) += leds.o
+ ath10k_core-$(CONFIG_MAC80211_DEBUGFS) += debugfs_sta.o
+ ath10k_core-$(CONFIG_PM) += wow.o
+ ath10k_core-$(CONFIG_DEV_COREDUMP) += coredump.o
+diff --git a/ath10k-4.16/core.c b/ath10k-4.16/core.c
+index e900d74..964ed61 100644
+--- a/ath10k-4.16/core.c
++++ b/ath10k-4.16/core.c
+@@ -34,6 +34,7 @@
+ #include "testmode.h"
+ #include "wmi-ops.h"
+ #include "coredump.h"
++#include "leds.h"
+ 
+ /* Disable ath10k-ct DBGLOG output by default */
+ unsigned int ath10k_debug_mask = ATH10K_DBG_NO_DBGLOG;
+@@ -73,6 +74,7 @@ static const struct ath10k_hw_params ath10k_hw_params_list[] = {
+ 		.id = QCA988X_HW_2_0_VERSION,
+ 		.dev_id = QCA988X_2_0_DEVICE_ID,
+ 		.name = "qca988x hw2.0",
++		.led_pin = 1,
+ 		.patch_load_addr = QCA988X_HW_2_0_PATCH_LOAD_ADDR,
+ 		.uart_pin = 7,
+ 		.cc_wraparound_type = ATH10K_HW_CC_WRAP_SHIFTED_ALL,
+@@ -131,6 +133,7 @@ static const struct ath10k_hw_params ath10k_hw_params_list[] = {
+ 		.id = QCA9887_HW_1_0_VERSION,
+ 		.dev_id = QCA9887_1_0_DEVICE_ID,
+ 		.name = "qca9887 hw1.0",
++		.led_pin = 1,
+ 		.patch_load_addr = QCA9887_HW_1_0_PATCH_LOAD_ADDR,
+ 		.uart_pin = 7,
+ 		.cc_wraparound_type = ATH10K_HW_CC_WRAP_SHIFTED_ALL,
+@@ -275,6 +278,7 @@ static const struct ath10k_hw_params ath10k_hw_params_list[] = {
+ 		.id = QCA99X0_HW_2_0_DEV_VERSION,
+ 		.dev_id = QCA99X0_2_0_DEVICE_ID,
+ 		.name = "qca99x0 hw2.0",
++		.led_pin = 17,
+ 		.patch_load_addr = QCA99X0_HW_2_0_PATCH_LOAD_ADDR,
+ 		.uart_pin = 7,
+ 		.otp_exe_param = 0x00000700,
+@@ -309,6 +313,7 @@ static const struct ath10k_hw_params ath10k_hw_params_list[] = {
+ 		.id = QCA9984_HW_1_0_DEV_VERSION,
+ 		.dev_id = QCA9984_1_0_DEVICE_ID,
+ 		.name = "qca9984/qca9994 hw1.0",
++		.led_pin = 17,
+ 		.patch_load_addr = QCA9984_HW_1_0_PATCH_LOAD_ADDR,
+ 		.uart_pin = 7,
+ 		.cc_wraparound_type = ATH10K_HW_CC_WRAP_SHIFTED_EACH,
+@@ -348,6 +353,7 @@ static const struct ath10k_hw_params ath10k_hw_params_list[] = {
+ 		.id = QCA9888_HW_2_0_DEV_VERSION,
+ 		.dev_id = QCA9888_2_0_DEVICE_ID,
+ 		.name = "qca9888 hw2.0",
++		.led_pin = 17,
+ 		.patch_load_addr = QCA9888_HW_2_0_PATCH_LOAD_ADDR,
+ 		.uart_pin = 7,
+ 		.cc_wraparound_type = ATH10K_HW_CC_WRAP_SHIFTED_EACH,
+@@ -1563,14 +1569,61 @@ out:
+ 	return ret;
+ }
+ 
++static int ath10k_core_search_bd(struct ath10k *ar,
++				 const char *boardname,
++				 const u8 *data,
++				 size_t len)
++{
++	size_t ie_len;
++	struct ath10k_fw_ie *hdr;
++	int ret = -ENOENT, ie_id;
++
++	while (len > sizeof(struct ath10k_fw_ie)) {
++		hdr = (struct ath10k_fw_ie *)data;
++		ie_id = le32_to_cpu(hdr->id);
++		ie_len = le32_to_cpu(hdr->len);
++
++		len -= sizeof(*hdr);
++		data = hdr->data;
++
++		if (len < ALIGN(ie_len, 4)) {
++			ath10k_err(ar, "invalid length for board ie_id %d ie_len %zu len %zu\n",
++				   ie_id, ie_len, len);
++			return -EINVAL;
++		}
++
++		switch (ie_id) {
++		case ATH10K_BD_IE_BOARD:
++			ret = ath10k_core_parse_bd_ie_board(ar, data, ie_len,
++							    boardname);
++			if (ret == -ENOENT)
++				/* no match found, continue */
++				break;
++
++			/* either found or error, so stop searching */
++			goto out;
++		}
++
++		/* jump over the padding */
++		ie_len = ALIGN(ie_len, 4);
++
++		len -= ie_len;
++		data += ie_len;
++	}
++
++out:
++	/* return result of parse_bd_ie_board() or -ENOENT */
++	return ret;
++}
++
+ static int ath10k_core_fetch_board_data_api_n(struct ath10k *ar,
+ 					      const char *boardname,
++					      const char *fallback_boardname,
+ 					      const char *filename)
+ {
+-	size_t len, magic_len, ie_len;
+-	struct ath10k_fw_ie *hdr;
++	size_t len, magic_len;
+ 	const u8 *data;
+-	int ret, ie_id;
++	int ret;
+ 
+ 	ar->normal_mode_fw.board = ath10k_fetch_fw_file(ar,
+ 							ar->hw_params.fw.dir,
+@@ -1608,73 +1661,28 @@ static int ath10k_core_fetch_board_data_api_n(struct ath10k *ar,
+ 	data += magic_len;
+ 	len -= magic_len;
+ 
+-	while (len > sizeof(struct ath10k_fw_ie)) {
+-		hdr = (struct ath10k_fw_ie *)data;
+-		ie_id = le32_to_cpu(hdr->id);
+-		ie_len = le32_to_cpu(hdr->len);
++	/* attempt to find boardname in the IE list */
++	ret = ath10k_core_search_bd(ar, boardname, data, len);
+ 
+-		len -= sizeof(*hdr);
+-		data = hdr->data;
+-
+-		if (len < ALIGN(ie_len, 4)) {
+-			ath10k_err(ar, "invalid length for board ie_id %d ie_len %zu len %zu\n",
+-				   ie_id, ie_len, len);
+-			ret = -EINVAL;
+-			goto err;
+-		}
+-
+-		switch (ie_id) {
+-		case ATH10K_BD_IE_BOARD:
+-			ret = ath10k_core_parse_bd_ie_board(ar, data, ie_len,
+-							    boardname);
+-			if (ret == -ENOENT && ar->id.bdf_ext[0] != '\0') {
+-				/* try default bdf if variant was not found */
+-				char *s, *v = ",variant=";
+-				char boardname2[100];
+-
+-				strlcpy(boardname2, boardname,
+-					sizeof(boardname2));
+-
+-				s = strstr(boardname2, v);
+-				if (s)
+-					*s = '\0';  /* strip ",variant=%s" */
+-
+-				ret = ath10k_core_parse_bd_ie_board(ar, data,
+-								    ie_len,
+-								    boardname2);
+-			}
+-
+-			if (ret == -ENOENT)
+-				/* no match found, continue */
+-				break;
+-			else if (ret)
+-				/* there was an error, bail out */
+-				goto err;
+-
+-			/* board data found */
+-			goto out;
+-		}
+-
+-		/* jump over the padding */
+-		ie_len = ALIGN(ie_len, 4);
+-
+-		len -= ie_len;
+-		data += ie_len;
+-	}
++	/* if we didn't find it and have a fallback name, try that */
++	if (ret == -ENOENT && fallback_boardname)
++		ret = ath10k_core_search_bd(ar, fallback_boardname, data, len);
+ 
+ out:
+-	if (!ar->normal_mode_fw.board_data || !ar->normal_mode_fw.board_len) {
++	if (ret == -ENOENT) {
+ 		ath10k_err(ar,
+ 			   "failed to fetch board data for %s from %s/%s\n",
+ 			   boardname, ar->hw_params.fw.dir, filename);
+ 		ret = -ENODATA;
+-		goto err;
+ 	}
+ 
+ 	/* Save firmware board name so we can display it later. */
+ 	strlcpy(ar->normal_mode_fw.fw_file.fw_board_name, filename,
+ 		sizeof(ar->normal_mode_fw.fw_file.fw_board_name));
+ 
++	if (ret)
++		goto err;
++
+ 	return 0;
+ 
+ err:
+@@ -1683,12 +1691,12 @@ err:
+ }
+ 
+ static int ath10k_core_create_board_name(struct ath10k *ar, char *name,
+-					 size_t name_len)
++					 size_t name_len, bool with_variant)
+ {
+ 	/* strlen(',variant=') + strlen(ar->id.bdf_ext) */
+ 	char variant[9 + ATH10K_SMBIOS_BDF_EXT_STR_LENGTH] = { 0 };
+ 
+-	if (ar->id.bdf_ext[0] != '\0')
++	if (with_variant && ar->id.bdf_ext[0] != '\0')
+ 		scnprintf(variant, sizeof(variant), ",variant=%s",
+ 			  ar->id.bdf_ext);
+ 
+@@ -1714,21 +1722,31 @@ out:
+ 
+ static int ath10k_core_fetch_board_file(struct ath10k *ar)
+ {
+-	char boardname[100];
++	char boardname[100], fallback_boardname[100];
+ 	int ret;
+ 
+-	ret = ath10k_core_create_board_name(ar, boardname, sizeof(boardname));
++	ret = ath10k_core_create_board_name(ar, boardname,
++					    sizeof(boardname), true);
+ 	if (ret) {
+ 		ath10k_err(ar, "failed to create board name: %d", ret);
+ 		return ret;
+ 	}
+ 
++	ret = ath10k_core_create_board_name(ar, fallback_boardname,
++					    sizeof(boardname), false);
++	if (ret) {
++		ath10k_err(ar, "failed to create fallback board name: %d", ret);
++		return ret;
++	}
++
+ 	ar->bd_api = 2;
+ 	if (ar->fwcfg.bname[0])
+ 		ret = ath10k_core_fetch_board_data_api_n(ar, boardname,
++							 fallback_boardname,
+ 							 ar->fwcfg.bname);
+ 	else
+ 		ret = ath10k_core_fetch_board_data_api_n(ar, boardname,
++							 fallback_boardname,
+ 							 ATH10K_BOARD_API2_FILE);
+ 	if (!ret)
+ 		goto success;
+@@ -3072,6 +3090,10 @@ int ath10k_core_start(struct ath10k *ar, enum ath10k_firmware_mode mode,
+ 			ath10k_wmi_check_apply_board_power_ctl_table(ar);
+ 	}
+ 
++	status = ath10k_leds_start(ar);
++	if (status)
++		goto err_hif_stop;
++
+ 	return 0;
+ 
+ err_hif_stop:
+@@ -3318,9 +3340,18 @@ static void ath10k_core_register_work(struct work_struct *work)
+ 		goto err_spectral_destroy;
+ 	}
+ 
++	status = ath10k_leds_register(ar);
++	if (status) {
++		ath10k_err(ar, "could not register leds: %d\n",
++			   status);
++		goto err_thermal_unregister;
++	}
++
+ 	set_bit(ATH10K_FLAG_CORE_REGISTERED, &ar->dev_flags);
+ 	return;
+ 
++err_thermal_unregister:
++	ath10k_thermal_unregister(ar);
+ err_spectral_destroy:
+ 	ath10k_spectral_destroy(ar);
+ err_debug_destroy:
+@@ -3378,6 +3409,8 @@ void ath10k_core_unregister(struct ath10k *ar)
+ 	if (!test_bit(ATH10K_FLAG_CORE_REGISTERED, &ar->dev_flags))
+ 		return;
+ 
++	ath10k_leds_unregister(ar);
++
+ 	ath10k_thermal_unregister(ar);
+ 	/* Stop spectral before unregistering from mac80211 to remove the
+ 	 * relayfs debugfs file cleanly. Otherwise the parent debugfs tree
+diff --git a/ath10k-4.16/core.h b/ath10k-4.16/core.h
+index b53b924..1dc9d84 100644
+--- a/ath10k-4.16/core.h
++++ b/ath10k-4.16/core.h
+@@ -24,6 +24,7 @@
+ #include <linux/pci.h>
+ #include <linux/uuid.h>
+ #include <linux/time.h>
++#include <linux/leds.h>
+ 
+ #include "htt.h"
+ #include "htc.h"
+@@ -1272,6 +1273,13 @@ struct ath10k {
+ 		bool utf_monitor;
+ 	} testmode;
+ 
++	struct {
++		struct gpio_led wifi_led;
++		struct led_classdev cdev;
++		char label[48];
++		u32 gpio_state_pin;
++	} leds;
++
+ 	struct {
+ 		/* protected by data_lock */
+ 		u32 fw_crash_counter;
+@@ -1358,6 +1366,10 @@ struct ath10k {
+ 	u8 csi_data[4096];
+ 	u16 csi_data_len;
+ 
++#ifdef CPTCFG_MAC80211_LEDS
++	const char *led_default_trigger;
++#endif
++
+ 	/* must be last */
+ 	u8 drv_priv[0] __aligned(sizeof(void *));
+ };
+diff --git a/ath10k-4.16/hw.h b/ath10k-4.16/hw.h
+index ec8e3ce..4597583 100644
+--- a/ath10k-4.16/hw.h
++++ b/ath10k-4.16/hw.h
+@@ -499,6 +499,7 @@ struct ath10k_hw_params {
+ 	const char *name;
+ 	u32 patch_load_addr;
+ 	int uart_pin;
++	int led_pin;
+ 	u32 otp_exe_param;
+ 
+ 	/* Type of hw cycle counter wraparound logic, for more info
+diff --git a/ath10k-4.16/leds.c b/ath10k-4.16/leds.c
+new file mode 100644
+index 0000000..be8f255
+--- /dev/null
++++ b/ath10k-4.16/leds.c
+@@ -0,0 +1,101 @@
++/*
++ * Copyright (c) 2005-2011 Atheros Communications Inc.
++ * Copyright (c) 2011-2017 Qualcomm Atheros, Inc.
++ * Copyright (c) 2018 Sebastian Gottschall <s.gottschall@dd-wrt.com>
++ * Copyright (c) 2018, The Linux Foundation. All rights reserved.
++ *
++ * Permission to use, copy, modify, and/or distribute this software for any
++ * purpose with or without fee is hereby granted, provided that the above
++ * copyright notice and this permission notice appear in all copies.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
++ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
++ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
++ * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
++ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
++ * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
++ * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
++ */
++
++#include <linux/leds.h>
++
++#include "core.h"
++#include "wmi.h"
++#include "wmi-ops.h"
++
++#include "leds.h"
++
++static int ath10k_leds_set_brightness_blocking(struct led_classdev *led_cdev,
++					       enum led_brightness brightness)
++{
++	struct ath10k *ar = container_of(led_cdev, struct ath10k,
++					 leds.cdev);
++	struct gpio_led *led = &ar->leds.wifi_led;
++
++	mutex_lock(&ar->conf_mutex);
++
++	if (ar->state != ATH10K_STATE_ON)
++		goto out;
++
++	ar->leds.gpio_state_pin = (brightness != LED_OFF) ^ led->active_low;
++	ath10k_wmi_gpio_output(ar, led->gpio, ar->leds.gpio_state_pin);
++
++out:
++	mutex_unlock(&ar->conf_mutex);
++
++	return 0;
++}
++
++int ath10k_leds_start(struct ath10k *ar)
++{
++	if (ar->hw_params.led_pin == 0)
++		/* leds not supported */
++		return 0;
++
++	/* under some circumstances, the gpio pin gets reconfigured
++	 * to default state by the firmware, so we need to
++	 * reconfigure it this behaviour has only ben seen on
++	 * QCA9984 and QCA99XX devices so far
++	 */
++	ath10k_wmi_gpio_config(ar, ar->hw_params.led_pin, 0,
++			       WMI_GPIO_PULL_NONE, WMI_GPIO_INTTYPE_DISABLE);
++	ath10k_wmi_gpio_output(ar, ar->hw_params.led_pin, 1);
++
++	return 0;
++}
++
++int ath10k_leds_register(struct ath10k *ar)
++{
++	int ret;
++
++	if (ar->hw_params.led_pin == 0)
++		/* leds not supported */
++		return 0;
++
++	snprintf(ar->leds.label, sizeof(ar->leds.label), "ath10k-%s",
++		 wiphy_name(ar->hw->wiphy));
++	ar->leds.wifi_led.active_low = 1;
++	ar->leds.wifi_led.gpio = ar->hw_params.led_pin;
++	ar->leds.wifi_led.name = ar->leds.label;
++	ar->leds.wifi_led.default_state = LEDS_GPIO_DEFSTATE_KEEP;
++
++	ar->leds.cdev.name = ar->leds.label;
++	ar->leds.cdev.brightness_set_blocking = ath10k_leds_set_brightness_blocking;
++	ar->leds.cdev.default_trigger = ar->led_default_trigger;
++
++	ret = led_classdev_register(wiphy_dev(ar->hw->wiphy), &ar->leds.cdev);
++	if (ret)
++		return ret;
++
++	return 0;
++}
++
++void ath10k_leds_unregister(struct ath10k *ar)
++{
++	if (ar->hw_params.led_pin == 0)
++		/* leds not supported */
++		return;
++
++	led_classdev_unregister(&ar->leds.cdev);
++}
++
+diff --git a/ath10k-4.16/leds.h b/ath10k-4.16/leds.h
+new file mode 100644
+index 0000000..ce05000
+--- /dev/null
++++ b/ath10k-4.16/leds.h
+@@ -0,0 +1,41 @@
++/*
++ * Copyright (c) 2018, The Linux Foundation. All rights reserved.
++ *
++ * Permission to use, copy, modify, and/or distribute this software for any
++ * purpose with or without fee is hereby granted, provided that the above
++ * copyright notice and this permission notice appear in all copies.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
++ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
++ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
++ * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
++ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
++ * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
++ * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
++ */
++#ifndef _LEDS_H_
++#define _LEDS_H_
++
++#include "core.h"
++
++#ifdef CONFIG_ATH10K_LEDS
++void ath10k_leds_unregister(struct ath10k *ar);
++int ath10k_leds_start(struct ath10k *ar);
++int ath10k_leds_register(struct ath10k *ar);
++#else
++static inline void ath10k_leds_unregister(struct ath10k *ar)
++{
++}
++
++static inline int ath10k_leds_start(struct ath10k *ar)
++{
++	return 0;
++}
++
++static inline int ath10k_leds_register(struct ath10k *ar)
++{
++	return 0;
++}
++
++#endif
++#endif /* _LEDS_H_ */
+diff --git a/ath10k-4.16/mac.c b/ath10k-4.16/mac.c
+index f5640e2..ea4f5c1 100644
+--- a/ath10k-4.16/mac.c
++++ b/ath10k-4.16/mac.c
+@@ -33,6 +33,7 @@
+ #include "wmi-tlv.h"
+ #include "wmi-ops.h"
+ #include "wow.h"
++#include "leds.h"
+ 
+ /*********/
+ /* Rates */
+@@ -9738,7 +9739,7 @@ int ath10k_mac_register(struct ath10k *ar)
+ 	wiphy_ext_feature_set(ar->hw->wiphy, NL80211_EXT_FEATURE_CQM_RSSI_LIST);
+ 
+ #ifdef CPTCFG_MAC80211_LEDS
+-	ieee80211_create_tpt_led_trigger(ar->hw,
++	ar->led_default_trigger = ieee80211_create_tpt_led_trigger(ar->hw,
+ 		IEEE80211_TPT_LEDTRIG_FL_RADIO, ath10k_tpt_blink,
+ 		ARRAY_SIZE(ath10k_tpt_blink));
+ #endif
+diff --git a/ath10k-4.16/wmi-ops.h b/ath10k-4.16/wmi-ops.h
+index c351153..4d98852 100644
+--- a/ath10k-4.16/wmi-ops.h
++++ b/ath10k-4.16/wmi-ops.h
+@@ -199,6 +199,9 @@ struct wmi_ops {
+ 					(struct ath10k *ar,
+ 					 enum wmi_bss_survey_req_type type);
+ 	struct sk_buff *(*gen_echo)(struct ath10k *ar, u32 value);
++	struct sk_buff *(*gen_gpio_config)(struct ath10k *ar, u32 gpio_num,
++					   u32 input, u32 pull_type, u32 intr_mode);
++	struct sk_buff *(*gen_gpio_output)(struct ath10k *ar, u32 gpio_num, u32 set);
+ };
+ 
+ int ath10k_wmi_cmd_send(struct ath10k *ar, struct sk_buff *skb, u32 cmd_id);
+@@ -983,6 +986,35 @@ ath10k_wmi_force_fw_hang(struct ath10k *ar,
+ 	return ath10k_wmi_cmd_send(ar, skb, ar->wmi.cmd->force_fw_hang_cmdid);
+ }
+ 
++static inline int ath10k_wmi_gpio_config(struct ath10k *ar, u32 gpio_num,
++					 u32 input, u32 pull_type, u32 intr_mode)
++{
++	struct sk_buff *skb;
++
++	if (!ar->wmi.ops->gen_gpio_config)
++		return -EOPNOTSUPP;
++
++	skb = ar->wmi.ops->gen_gpio_config(ar, gpio_num, input, pull_type, intr_mode);
++	if (IS_ERR(skb))
++		return PTR_ERR(skb);
++
++	return ath10k_wmi_cmd_send(ar, skb, ar->wmi.cmd->gpio_config_cmdid);
++}
++
++static inline int ath10k_wmi_gpio_output(struct ath10k *ar, u32 gpio_num, u32 set)
++{
++	struct sk_buff *skb;
++
++	if (!ar->wmi.ops->gen_gpio_config)
++		return -EOPNOTSUPP;
++
++	skb = ar->wmi.ops->gen_gpio_output(ar, gpio_num, set);
++	if (IS_ERR(skb))
++		return PTR_ERR(skb);
++
++	return ath10k_wmi_cmd_send(ar, skb, ar->wmi.cmd->gpio_output_cmdid);
++}
++
+ static inline int
+ ath10k_wmi_dbglog_cfg(struct ath10k *ar, u64 module_enable, u32 log_level)
+ {
+diff --git a/ath10k-4.16/wmi-tlv.c b/ath10k-4.16/wmi-tlv.c
+index 5232749..f7c6e3e 100644
+--- a/ath10k-4.16/wmi-tlv.c
++++ b/ath10k-4.16/wmi-tlv.c
+@@ -3729,6 +3729,8 @@ static const struct wmi_ops wmi_tlv_ops = {
+ 	.gen_echo = ath10k_wmi_tlv_op_gen_echo,
+ 	.gen_vdev_spectral_conf = ath10k_wmi_tlv_op_gen_vdev_spectral_conf,
+ 	.gen_vdev_spectral_enable = ath10k_wmi_tlv_op_gen_vdev_spectral_enable,
++	/* .gen_gpio_config not implemented */
++	/* .gen_gpio_output not implemented */
+ };
+ 
+ static const struct wmi_peer_flags_map wmi_tlv_peer_flags_map = {
+diff --git a/ath10k-4.16/wmi.c b/ath10k-4.16/wmi.c
+index 7e84bbd..e59c82e 100644
+--- a/ath10k-4.16/wmi.c
++++ b/ath10k-4.16/wmi.c
+@@ -4117,7 +4117,7 @@ static void ath10k_dfs_radar_report(struct ath10k *ar,
+ 
+ 	ATH10K_DFS_STAT_INC(ar, pulses_detected);
+ 
+-	if (!ar->dfs_detector->add_pulse(ar->dfs_detector, &pe)) {
++	if (!ar->dfs_detector->add_pulse(ar->dfs_detector, &pe, NULL)) {
+ 		ath10k_dbg(ar, ATH10K_DBG_REGULATORY,
+ 			   "dfs no pulse pattern detected, yet\n");
+ 		return;
+@@ -7593,6 +7593,49 @@ ath10k_wmi_op_gen_peer_set_param(struct ath10k *ar, u32 vdev_id,
+ 	return skb;
+ }
+ 
++static struct sk_buff *ath10k_wmi_op_gen_gpio_config(struct ath10k *ar,
++						     u32 gpio_num, u32 input,
++						     u32 pull_type, u32 intr_mode)
++{
++	struct wmi_gpio_config_cmd *cmd;
++	struct sk_buff *skb;
++
++	skb = ath10k_wmi_alloc_skb(ar, sizeof(*cmd));
++	if (!skb)
++		return ERR_PTR(-ENOMEM);
++
++	cmd = (struct wmi_gpio_config_cmd *)skb->data;
++	cmd->pull_type = __cpu_to_le32(pull_type);
++	cmd->gpio_num = __cpu_to_le32(gpio_num);
++	cmd->input = __cpu_to_le32(input);
++	cmd->intr_mode = __cpu_to_le32(intr_mode);
++
++	ath10k_dbg(ar, ATH10K_DBG_WMI, "wmi gpio_config gpio_num 0x%08x input 0x%08x pull_type 0x%08x intr_mode 0x%08x\n",
++		   gpio_num, input, pull_type, intr_mode);
++
++	return skb;
++}
++
++static struct sk_buff *ath10k_wmi_op_gen_gpio_output(struct ath10k *ar,
++						     u32 gpio_num, u32 set)
++{
++	struct wmi_gpio_output_cmd *cmd;
++	struct sk_buff *skb;
++
++	skb = ath10k_wmi_alloc_skb(ar, sizeof(*cmd));
++	if (!skb)
++		return ERR_PTR(-ENOMEM);
++
++	cmd = (struct wmi_gpio_output_cmd *)skb->data;
++	cmd->gpio_num = __cpu_to_le32(gpio_num);
++	cmd->set = __cpu_to_le32(set);
++
++	ath10k_dbg(ar, ATH10K_DBG_WMI, "wmi gpio_output gpio_num 0x%08x set 0x%08x\n",
++		   gpio_num, set);
++
++	return skb;
++}
++
+ static struct sk_buff *
+ ath10k_wmi_op_gen_set_psmode(struct ath10k *ar, u32 vdev_id,
+ 			     enum wmi_sta_ps_mode psmode)
+@@ -9235,6 +9278,9 @@ static const struct wmi_ops wmi_ops = {
+ 	.fw_stats_fill = ath10k_wmi_main_op_fw_stats_fill,
+ 	.get_vdev_subtype = ath10k_wmi_op_get_vdev_subtype,
+ 	.gen_echo = ath10k_wmi_op_gen_echo,
++	.gen_gpio_config = ath10k_wmi_op_gen_gpio_config,
++	.gen_gpio_output = ath10k_wmi_op_gen_gpio_output,
++
+ 	/* .gen_bcn_tmpl not implemented */
+ 	/* .gen_prb_tmpl not implemented */
+ 	/* .gen_p2p_go_bcn_ie not implemented */
+@@ -9305,6 +9351,8 @@ static const struct wmi_ops wmi_10_1_ops = {
+ 	.fw_stats_fill = ath10k_wmi_10x_op_fw_stats_fill,
+ 	.get_vdev_subtype = ath10k_wmi_op_get_vdev_subtype,
+ 	.gen_echo = ath10k_wmi_op_gen_echo,
++	.gen_gpio_config = ath10k_wmi_op_gen_gpio_config,
++	.gen_gpio_output = ath10k_wmi_op_gen_gpio_output,
+ 	/* .gen_bcn_tmpl not implemented */
+ 	/* .gen_prb_tmpl not implemented */
+ 	/* .gen_p2p_go_bcn_ie not implemented */
+@@ -9383,6 +9431,8 @@ static const struct wmi_ops wmi_10_2_ops = {
+ 	.gen_delba_send = ath10k_wmi_op_gen_delba_send,
+ 	.fw_stats_fill = ath10k_wmi_10x_op_fw_stats_fill,
+ 	.get_vdev_subtype = ath10k_wmi_op_get_vdev_subtype,
++	.gen_gpio_config = ath10k_wmi_op_gen_gpio_config,
++	.gen_gpio_output = ath10k_wmi_op_gen_gpio_output,
+ 	/* .gen_pdev_enable_adaptive_cca not implemented */
+ };
+ 
+@@ -9453,6 +9503,8 @@ static const struct wmi_ops wmi_10_2_4_ops = {
+ 	.gen_pdev_enable_adaptive_cca =
+ 		ath10k_wmi_op_gen_pdev_enable_adaptive_cca,
+ 	.get_vdev_subtype = ath10k_wmi_10_2_4_op_get_vdev_subtype,
++	.gen_gpio_config = ath10k_wmi_op_gen_gpio_config,
++	.gen_gpio_output = ath10k_wmi_op_gen_gpio_output,
+ 	/* .gen_bcn_tmpl not implemented */
+ 	/* .gen_prb_tmpl not implemented */
+ 	/* .gen_p2p_go_bcn_ie not implemented */
+@@ -9529,6 +9581,8 @@ static const struct wmi_ops wmi_10_4_ops = {
+ 	.gen_pdev_bss_chan_info_req = ath10k_wmi_10_2_op_gen_pdev_bss_chan_info,
+ 	.gen_echo = ath10k_wmi_op_gen_echo,
+ 	.gen_pdev_get_tpc_config = ath10k_wmi_10_2_4_op_gen_pdev_get_tpc_config,
++	.gen_gpio_config = ath10k_wmi_op_gen_gpio_config,
++	.gen_gpio_output = ath10k_wmi_op_gen_gpio_output,
+ };
+ 
+ int ath10k_wmi_attach(struct ath10k *ar)
+diff --git a/ath10k-4.16/wmi.h b/ath10k-4.16/wmi.h
+index 1d57f7a..615bd2d 100644
+--- a/ath10k-4.16/wmi.h
++++ b/ath10k-4.16/wmi.h
+@@ -3013,6 +3013,41 @@ enum wmi_10_4_feature_mask {
+ 
+ };
+ 
++/* WMI_GPIO_CONFIG_CMDID */
++enum {
++	WMI_GPIO_PULL_NONE,
++	WMI_GPIO_PULL_UP,
++	WMI_GPIO_PULL_DOWN,
++};
++
++enum {
++	WMI_GPIO_INTTYPE_DISABLE,
++	WMI_GPIO_INTTYPE_RISING_EDGE,
++	WMI_GPIO_INTTYPE_FALLING_EDGE,
++	WMI_GPIO_INTTYPE_BOTH_EDGE,
++	WMI_GPIO_INTTYPE_LEVEL_LOW,
++	WMI_GPIO_INTTYPE_LEVEL_HIGH
++};
++
++/* WMI_GPIO_CONFIG_CMDID */
++struct wmi_gpio_config_cmd {
++	__le32 gpio_num;             /* GPIO number to be setup */
++	__le32 input;                /* 0 - Output/ 1 - Input */
++	__le32 pull_type;            /* Pull type defined above */
++	__le32 intr_mode;            /* Interrupt mode defined above (Input) */
++} __packed;
++
++/* WMI_GPIO_OUTPUT_CMDID */
++struct wmi_gpio_output_cmd {
++	__le32 gpio_num;    /* GPIO number to be setup */
++	__le32 set;         /* Set the GPIO pin*/
++} __packed;
++
++/* WMI_GPIO_INPUT_EVENTID */
++struct wmi_gpio_input_event {
++	__le32 gpio_num;    /* GPIO number which changed state */
++} __packed;
++
+ struct wmi_ext_resource_config_10_4_cmd {
+ 	/* contains enum wmi_host_platform_type */
+ 	__le32 host_platform_config;
+diff --git a/ath10k-4.19/Kconfig b/ath10k-4.19/Kconfig
+index 54ff593..e29f84e 100644
+--- a/ath10k-4.19/Kconfig
++++ b/ath10k-4.19/Kconfig
+@@ -64,6 +64,16 @@ config ATH10K_DEBUGFS
+ 
+ 	  If unsure, say Y to make it easier to debug problems.
+ 
++config ATH10K_LEDS
++	bool "Atheros ath10k LED support"
++	depends on ATH10K
++	select MAC80211_LEDS
++	select LEDS_CLASS
++	select NEW_LEDS
++	default y
++	---help---
++	  This option is necessary, if you want LED support for chipset connected led pins. If unsure, say N.
++
+ config ATH10K_SPECTRAL
+ 	bool "Atheros ath10k spectral scan support"
+ 	depends on ATH10K_DEBUGFS
+diff --git a/ath10k-4.19/Makefile b/ath10k-4.19/Makefile
+index 44d60a6..d796cc2 100644
+--- a/ath10k-4.19/Makefile
++++ b/ath10k-4.19/Makefile
+@@ -19,6 +19,7 @@ ath10k_core-$(CONFIG_ATH10K_SPECTRAL) += spectral.o
+ ath10k_core-$(CONFIG_NL80211_TESTMODE) += testmode.o
+ ath10k_core-$(CONFIG_ATH10K_TRACING) += trace.o
+ ath10k_core-$(CONFIG_THERMAL) += thermal.o
++ath10k_core-$(CONFIG_ATH10K_LEDS) += leds.o
+ ath10k_core-$(CONFIG_MAC80211_DEBUGFS) += debugfs_sta.o
+ ath10k_core-$(CONFIG_PM) += wow.o
+ ath10k_core-$(CONFIG_DEV_COREDUMP) += coredump.o
+diff --git a/ath10k-4.19/core.c b/ath10k-4.19/core.c
+index d5142ac..3c28646 100644
+--- a/ath10k-4.19/core.c
++++ b/ath10k-4.19/core.c
+@@ -35,6 +35,7 @@
+ #include "testmode.h"
+ #include "wmi-ops.h"
+ #include "coredump.h"
++#include "leds.h"
+ 
+ /* Disable ath10k-ct DBGLOG output by default */
+ unsigned int ath10k_debug_mask = ATH10K_DBG_NO_DBGLOG;
+@@ -72,6 +73,7 @@ static const struct ath10k_hw_params ath10k_hw_params_list[] = {
+ 		.id = QCA988X_HW_2_0_VERSION,
+ 		.dev_id = QCA988X_2_0_DEVICE_ID,
+ 		.name = "qca988x hw2.0",
++		.led_pin = 1,
+ 		.patch_load_addr = QCA988X_HW_2_0_PATCH_LOAD_ADDR,
+ 		.uart_pin = 7,
+ 		.cc_wraparound_type = ATH10K_HW_CC_WRAP_SHIFTED_ALL,
+@@ -137,6 +139,7 @@ static const struct ath10k_hw_params ath10k_hw_params_list[] = {
+ 		.id = QCA9887_HW_1_0_VERSION,
+ 		.dev_id = QCA9887_1_0_DEVICE_ID,
+ 		.name = "qca9887 hw1.0",
++		.led_pin = 1,
+ 		.patch_load_addr = QCA9887_HW_1_0_PATCH_LOAD_ADDR,
+ 		.uart_pin = 7,
+ 		.cc_wraparound_type = ATH10K_HW_CC_WRAP_SHIFTED_ALL,
+@@ -301,6 +304,7 @@ static const struct ath10k_hw_params ath10k_hw_params_list[] = {
+ 		.id = QCA99X0_HW_2_0_DEV_VERSION,
+ 		.dev_id = QCA99X0_2_0_DEVICE_ID,
+ 		.name = "qca99x0 hw2.0",
++		.led_pin = 17,
+ 		.patch_load_addr = QCA99X0_HW_2_0_PATCH_LOAD_ADDR,
+ 		.uart_pin = 7,
+ 		.otp_exe_param = 0x00000700,
+@@ -339,6 +343,7 @@ static const struct ath10k_hw_params ath10k_hw_params_list[] = {
+ 		.id = QCA9984_HW_1_0_DEV_VERSION,
+ 		.dev_id = QCA9984_1_0_DEVICE_ID,
+ 		.name = "qca9984/qca9994 hw1.0",
++		.led_pin = 17,
+ 		.patch_load_addr = QCA9984_HW_1_0_PATCH_LOAD_ADDR,
+ 		.uart_pin = 7,
+ 		.cc_wraparound_type = ATH10K_HW_CC_WRAP_SHIFTED_EACH,
+@@ -382,6 +387,7 @@ static const struct ath10k_hw_params ath10k_hw_params_list[] = {
+ 		.id = QCA9888_HW_2_0_DEV_VERSION,
+ 		.dev_id = QCA9888_2_0_DEVICE_ID,
+ 		.name = "qca9888 hw2.0",
++		.led_pin = 17,
+ 		.patch_load_addr = QCA9888_HW_2_0_PATCH_LOAD_ADDR,
+ 		.uart_pin = 7,
+ 		.cc_wraparound_type = ATH10K_HW_CC_WRAP_SHIFTED_EACH,
+@@ -3147,6 +3153,10 @@ int ath10k_core_start(struct ath10k *ar, enum ath10k_firmware_mode mode,
+ 			ath10k_wmi_check_apply_board_power_ctl_table(ar);
+ 	}
+ 
++	status = ath10k_leds_start(ar);
++	if (status)
++		goto err_hif_stop;
++
+ 	return 0;
+ 
+ err_hif_stop:
+@@ -3401,9 +3411,18 @@ static void ath10k_core_register_work(struct work_struct *work)
+ 		goto err_spectral_destroy;
+ 	}
+ 
++	status = ath10k_leds_register(ar);
++	if (status) {
++		ath10k_err(ar, "could not register leds: %d\n",
++			   status);
++		goto err_thermal_unregister;
++	}
++
+ 	set_bit(ATH10K_FLAG_CORE_REGISTERED, &ar->dev_flags);
+ 	return;
+ 
++err_thermal_unregister:
++	ath10k_thermal_unregister(ar);
+ err_spectral_destroy:
+ 	ath10k_spectral_destroy(ar);
+ err_debug_destroy:
+@@ -3461,6 +3480,8 @@ void ath10k_core_unregister(struct ath10k *ar)
+ 	if (!test_bit(ATH10K_FLAG_CORE_REGISTERED, &ar->dev_flags))
+ 		return;
+ 
++	ath10k_leds_unregister(ar);
++
+ 	ath10k_thermal_unregister(ar);
+ 	/* Stop spectral before unregistering from mac80211 to remove the
+ 	 * relayfs debugfs file cleanly. Otherwise the parent debugfs tree
+diff --git a/ath10k-4.19/core.h b/ath10k-4.19/core.h
+index d0fb02e..56cd250 100644
+--- a/ath10k-4.19/core.h
++++ b/ath10k-4.19/core.h
+@@ -25,6 +25,7 @@
+ #include <linux/pci.h>
+ #include <linux/uuid.h>
+ #include <linux/time.h>
++#include <linux/leds.h>
+ 
+ #include "htt.h"
+ #include "htc.h"
+@@ -1132,7 +1133,6 @@ struct ath10k {
+ 	u32 low_5ghz_chan;
+ 	u32 high_5ghz_chan;
+ 	bool ani_enabled;
+-
+ 	bool p2p;
+ 	bool ct_all_pkts_htt; /* CT firmware only: native-wifi for all pkts */
+ 
+@@ -1382,6 +1382,13 @@ struct ath10k {
+ 		bool utf_monitor;
+ 	} testmode;
+ 
++	struct {
++		struct gpio_led wifi_led;
++		struct led_classdev cdev;
++		char label[48];
++		u32 gpio_state_pin;
++	} leds;
++
+ 	struct {
+ 		/* protected by data_lock */
+ 		u32 fw_crash_counter;
+@@ -1475,6 +1482,10 @@ struct ath10k {
+ 	u8 csi_data[4096];
+ 	u16 csi_data_len;
+ 
++#ifdef CPTCFG_MAC80211_LEDS
++	const char *led_default_trigger;
++#endif
++
+ 	/* must be last */
+ 	u8 drv_priv[0] __aligned(sizeof(void *));
+ };
+diff --git a/ath10k-4.19/hw.h b/ath10k-4.19/hw.h
+index f78691c..ff06a76 100644
+--- a/ath10k-4.19/hw.h
++++ b/ath10k-4.19/hw.h
+@@ -508,6 +508,7 @@ struct ath10k_hw_params {
+ 	const char *name;
+ 	u32 patch_load_addr;
+ 	int uart_pin;
++	int led_pin;
+ 	u32 otp_exe_param;
+ 
+ 	/* Type of hw cycle counter wraparound logic, for more info
+diff --git a/ath10k-4.19/leds.c b/ath10k-4.19/leds.c
+new file mode 100644
+index 0000000..be8f255
+--- /dev/null
++++ b/ath10k-4.19/leds.c
+@@ -0,0 +1,101 @@
++/*
++ * Copyright (c) 2005-2011 Atheros Communications Inc.
++ * Copyright (c) 2011-2017 Qualcomm Atheros, Inc.
++ * Copyright (c) 2018 Sebastian Gottschall <s.gottschall@dd-wrt.com>
++ * Copyright (c) 2018, The Linux Foundation. All rights reserved.
++ *
++ * Permission to use, copy, modify, and/or distribute this software for any
++ * purpose with or without fee is hereby granted, provided that the above
++ * copyright notice and this permission notice appear in all copies.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
++ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
++ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
++ * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
++ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
++ * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
++ * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
++ */
++
++#include <linux/leds.h>
++
++#include "core.h"
++#include "wmi.h"
++#include "wmi-ops.h"
++
++#include "leds.h"
++
++static int ath10k_leds_set_brightness_blocking(struct led_classdev *led_cdev,
++					       enum led_brightness brightness)
++{
++	struct ath10k *ar = container_of(led_cdev, struct ath10k,
++					 leds.cdev);
++	struct gpio_led *led = &ar->leds.wifi_led;
++
++	mutex_lock(&ar->conf_mutex);
++
++	if (ar->state != ATH10K_STATE_ON)
++		goto out;
++
++	ar->leds.gpio_state_pin = (brightness != LED_OFF) ^ led->active_low;
++	ath10k_wmi_gpio_output(ar, led->gpio, ar->leds.gpio_state_pin);
++
++out:
++	mutex_unlock(&ar->conf_mutex);
++
++	return 0;
++}
++
++int ath10k_leds_start(struct ath10k *ar)
++{
++	if (ar->hw_params.led_pin == 0)
++		/* leds not supported */
++		return 0;
++
++	/* under some circumstances, the gpio pin gets reconfigured
++	 * to default state by the firmware, so we need to
++	 * reconfigure it this behaviour has only ben seen on
++	 * QCA9984 and QCA99XX devices so far
++	 */
++	ath10k_wmi_gpio_config(ar, ar->hw_params.led_pin, 0,
++			       WMI_GPIO_PULL_NONE, WMI_GPIO_INTTYPE_DISABLE);
++	ath10k_wmi_gpio_output(ar, ar->hw_params.led_pin, 1);
++
++	return 0;
++}
++
++int ath10k_leds_register(struct ath10k *ar)
++{
++	int ret;
++
++	if (ar->hw_params.led_pin == 0)
++		/* leds not supported */
++		return 0;
++
++	snprintf(ar->leds.label, sizeof(ar->leds.label), "ath10k-%s",
++		 wiphy_name(ar->hw->wiphy));
++	ar->leds.wifi_led.active_low = 1;
++	ar->leds.wifi_led.gpio = ar->hw_params.led_pin;
++	ar->leds.wifi_led.name = ar->leds.label;
++	ar->leds.wifi_led.default_state = LEDS_GPIO_DEFSTATE_KEEP;
++
++	ar->leds.cdev.name = ar->leds.label;
++	ar->leds.cdev.brightness_set_blocking = ath10k_leds_set_brightness_blocking;
++	ar->leds.cdev.default_trigger = ar->led_default_trigger;
++
++	ret = led_classdev_register(wiphy_dev(ar->hw->wiphy), &ar->leds.cdev);
++	if (ret)
++		return ret;
++
++	return 0;
++}
++
++void ath10k_leds_unregister(struct ath10k *ar)
++{
++	if (ar->hw_params.led_pin == 0)
++		/* leds not supported */
++		return;
++
++	led_classdev_unregister(&ar->leds.cdev);
++}
++
+diff --git a/ath10k-4.19/leds.h b/ath10k-4.19/leds.h
+new file mode 100644
+index 0000000..ce05000
+--- /dev/null
++++ b/ath10k-4.19/leds.h
+@@ -0,0 +1,41 @@
++/*
++ * Copyright (c) 2018, The Linux Foundation. All rights reserved.
++ *
++ * Permission to use, copy, modify, and/or distribute this software for any
++ * purpose with or without fee is hereby granted, provided that the above
++ * copyright notice and this permission notice appear in all copies.
++ *
++ * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
++ * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
++ * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
++ * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
++ * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
++ * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
++ * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
++ */
++#ifndef _LEDS_H_
++#define _LEDS_H_
++
++#include "core.h"
++
++#ifdef CONFIG_ATH10K_LEDS
++void ath10k_leds_unregister(struct ath10k *ar);
++int ath10k_leds_start(struct ath10k *ar);
++int ath10k_leds_register(struct ath10k *ar);
++#else
++static inline void ath10k_leds_unregister(struct ath10k *ar)
++{
++}
++
++static inline int ath10k_leds_start(struct ath10k *ar)
++{
++	return 0;
++}
++
++static inline int ath10k_leds_register(struct ath10k *ar)
++{
++	return 0;
++}
++
++#endif
++#endif /* _LEDS_H_ */
+diff --git a/ath10k-4.19/mac.c b/ath10k-4.19/mac.c
+index 7ef0b46..b31e565 100644
+--- a/ath10k-4.19/mac.c
++++ b/ath10k-4.19/mac.c
+@@ -18,6 +18,7 @@
+ 
+ #include "mac.h"
+ 
++#include <net/cfg80211.h>
+ #include <net/mac80211.h>
+ #include <linux/etherdevice.h>
+ #include <linux/acpi.h>
+@@ -34,6 +35,7 @@
+ #include "wmi-tlv.h"
+ #include "wmi-ops.h"
+ #include "wow.h"
++#include "leds.h"
+ 
+ /*********/
+ /* Rates */
+@@ -157,6 +159,22 @@ u8 ath10k_mac_bitrate_to_idx(const struct ieee80211_supported_band *sband,
+ 	return 0;
+ }
+ 
++static int ath10k_mac_get_rate_hw_value(int bitrate)
++{
++	int i;
++	u8 hw_value_prefix = 0;
++
++	if (ath10k_mac_bitrate_is_cck(bitrate))
++		hw_value_prefix = WMI_RATE_PREAMBLE_CCK << 6;
++
++	for (i = 0; i < ARRAY_SIZE(ath10k_rates); i++) {
++		if (ath10k_rates[i].bitrate == bitrate)
++			return hw_value_prefix | ath10k_rates[i].hw_value;
++	}
++
++	return -EINVAL;
++}
++
+ static int ath10k_mac_get_max_vht_mcs_map(u16 mcs_map, int nss)
+ {
+ 	switch ((mcs_map >> (2 * nss)) & 0x3) {
+@@ -6333,9 +6351,10 @@ static void ath10k_bss_info_changed(struct ieee80211_hw *hw,
+ 	struct cfg80211_chan_def def;
+ 	u32 vdev_param, pdev_param, slottime, preamble;
+ 	u16 bitrate, hw_value;
+-	u8 rate;
+-	int rateidx, ret = 0;
++	u8 rate, basic_rate_idx, rateidx;
++	int ret = 0, hw_rate_code, mcast_rate;
+ 	enum nl80211_band band;
++	const struct ieee80211_supported_band *sband;
+ 
+ 	mutex_lock(&ar->conf_mutex);
+ 
+@@ -6506,7 +6525,11 @@ static void ath10k_bss_info_changed(struct ieee80211_hw *hw,
+ 	if (changed & BSS_CHANGED_MCAST_RATE &&
+ 	    !WARN_ON(ath10k_mac_vif_chan(arvif->vif, &def))) {
+ 		band = def.chan->band;
+-		rateidx = vif->bss_conf.mcast_rate[band] - 1;
++		mcast_rate = vif->bss_conf.mcast_rate[band];
++		if (mcast_rate > 0)
++			rateidx = mcast_rate - 1;
++		else
++			rateidx = ffs(vif->bss_conf.basic_rates) - 1;
+ 
+ 		if (ar->phy_capability & WHAL_WLAN_11A_CAPABILITY)
+ 			rateidx += ATH10K_MAC_FIRST_OFDM_RATE_IDX;
+@@ -6524,6 +6547,7 @@ static void ath10k_bss_info_changed(struct ieee80211_hw *hw,
+ 			   "mac vdev %d mcast_rate %x\n",
+ 			   arvif->vdev_id, rate);
+ 
++		arvif->mcast_rate[band] = rate;
+ 		vdev_param = ar->wmi.vdev_param->mcast_data_rate;
+ 		ret = ath10k_wmi_vdev_set_param(ar, arvif->vdev_id,
+ 						vdev_param, rate);
+@@ -6532,6 +6556,7 @@ static void ath10k_bss_info_changed(struct ieee80211_hw *hw,
+ 				    "failed to set mcast rate on vdev %i: %d\n",
+ 				    arvif->vdev_id,  ret);
+ 
++		arvif->bcast_rate[band] = rate;
+ 		vdev_param = ar->wmi.vdev_param->bcast_data_rate;
+ 		ret = ath10k_wmi_vdev_set_param(ar, arvif->vdev_id,
+ 						vdev_param, rate);
+@@ -6541,6 +6566,31 @@ static void ath10k_bss_info_changed(struct ieee80211_hw *hw,
+ 				    arvif->vdev_id,  ret);
+ 	}
+ 
++	if (changed & BSS_CHANGED_BASIC_RATES) {
++		if (WARN_ON(ath10k_mac_vif_chan(vif, &def))) {
++			mutex_unlock(&ar->conf_mutex);
++			return;
++		}
++
++		sband = ar->hw->wiphy->bands[def.chan->band];
++		basic_rate_idx = ffs(vif->bss_conf.basic_rates) - 1;
++		bitrate = sband->bitrates[basic_rate_idx].bitrate;
++
++		hw_rate_code = ath10k_mac_get_rate_hw_value(bitrate);
++		if (hw_rate_code < 0) {
++			ath10k_warn(ar, "bitrate not supported %d\n", bitrate);
++			mutex_unlock(&ar->conf_mutex);
++			return;
++		}
++
++		arvif->mgt_rate[def.chan->band] = hw_rate_code;
++		vdev_param = ar->wmi.vdev_param->mgmt_rate;
++		ret = ath10k_wmi_vdev_set_param(ar, arvif->vdev_id, vdev_param,
++						hw_rate_code);
++		if (ret)
++			ath10k_warn(ar, "failed to set mgmt tx rate %d\n", ret);
++	}
++
+ 	mutex_unlock(&ar->conf_mutex);
+ }
+ 
+@@ -9583,6 +9633,7 @@ int ath10k_mac_register(struct ath10k *ar)
+ 		ar->hw->wiphy->bands[NL80211_BAND_5GHZ] = band;
+ 	}
+ 
++	wiphy_read_of_freq_limits(ar->hw->wiphy);
+ 	ath10k_mac_setup_ht_vht_cap(ar);
+ 
+ 	ar->hw->wiphy->interface_modes =
+@@ -9859,7 +9910,7 @@ int ath10k_mac_register(struct ath10k *ar)
+ 	wiphy_ext_feature_set(ar->hw->wiphy, NL80211_EXT_FEATURE_CQM_RSSI_LIST);
+ 
+ #ifdef CPTCFG_MAC80211_LEDS
+-	ieee80211_create_tpt_led_trigger(ar->hw,
++	ar->led_default_trigger = ieee80211_create_tpt_led_trigger(ar->hw,
+ 		IEEE80211_TPT_LEDTRIG_FL_RADIO, ath10k_tpt_blink,
+ 		ARRAY_SIZE(ath10k_tpt_blink));
+ #endif
+diff --git a/ath10k-4.19/wmi-ops.h b/ath10k-4.19/wmi-ops.h
+index 30dc80d..5fe095d 100644
+--- a/ath10k-4.19/wmi-ops.h
++++ b/ath10k-4.19/wmi-ops.h
+@@ -218,7 +218,10 @@ struct wmi_ops {
+ 	struct sk_buff *(*gen_echo)(struct ath10k *ar, u32 value);
+ 	struct sk_buff *(*gen_pdev_get_tpc_table_cmdid)(struct ath10k *ar,
+ 							u32 param);
++	struct sk_buff *(*gen_gpio_config)(struct ath10k *ar, u32 gpio_num,
++					   u32 input, u32 pull_type, u32 intr_mode);
+ 
++	struct sk_buff *(*gen_gpio_output)(struct ath10k *ar, u32 gpio_num, u32 set);
+ };
+ 
+ int ath10k_wmi_cmd_send(struct ath10k *ar, struct sk_buff *skb, u32 cmd_id);
+@@ -1079,6 +1082,35 @@ ath10k_wmi_force_fw_hang(struct ath10k *ar,
+ 	return ath10k_wmi_cmd_send(ar, skb, ar->wmi.cmd->force_fw_hang_cmdid);
+ }
+ 
++static inline int ath10k_wmi_gpio_config(struct ath10k *ar, u32 gpio_num,
++					 u32 input, u32 pull_type, u32 intr_mode)
++{
++	struct sk_buff *skb;
++
++	if (!ar->wmi.ops->gen_gpio_config)
++		return -EOPNOTSUPP;
++
++	skb = ar->wmi.ops->gen_gpio_config(ar, gpio_num, input, pull_type, intr_mode);
++	if (IS_ERR(skb))
++		return PTR_ERR(skb);
++
++	return ath10k_wmi_cmd_send(ar, skb, ar->wmi.cmd->gpio_config_cmdid);
++}
++
++static inline int ath10k_wmi_gpio_output(struct ath10k *ar, u32 gpio_num, u32 set)
++{
++	struct sk_buff *skb;
++
++	if (!ar->wmi.ops->gen_gpio_config)
++		return -EOPNOTSUPP;
++
++	skb = ar->wmi.ops->gen_gpio_output(ar, gpio_num, set);
++	if (IS_ERR(skb))
++		return PTR_ERR(skb);
++
++	return ath10k_wmi_cmd_send(ar, skb, ar->wmi.cmd->gpio_output_cmdid);
++}
++
+ static inline int
+ ath10k_wmi_dbglog_cfg(struct ath10k *ar, u64 module_enable, u32 log_level)
+ {
+diff --git a/ath10k-4.19/wmi-tlv.c b/ath10k-4.19/wmi-tlv.c
+index 1c13c57..b459746 100644
+--- a/ath10k-4.19/wmi-tlv.c
++++ b/ath10k-4.19/wmi-tlv.c
+@@ -3976,6 +3976,8 @@ static const struct wmi_ops wmi_tlv_ops = {
+ 	.gen_echo = ath10k_wmi_tlv_op_gen_echo,
+ 	.gen_vdev_spectral_conf = ath10k_wmi_tlv_op_gen_vdev_spectral_conf,
+ 	.gen_vdev_spectral_enable = ath10k_wmi_tlv_op_gen_vdev_spectral_enable,
++	/* .gen_gpio_config not implemented */
++	/* .gen_gpio_output not implemented */
+ };
+ 
+ static const struct wmi_peer_flags_map wmi_tlv_peer_flags_map = {
+diff --git a/ath10k-4.19/wmi.c b/ath10k-4.19/wmi.c
+index c43362e..165694b 100644
+--- a/ath10k-4.19/wmi.c
++++ b/ath10k-4.19/wmi.c
+@@ -8070,6 +8070,49 @@ ath10k_wmi_op_gen_peer_set_param(struct ath10k *ar, u32 vdev_id,
+ 	return skb;
+ }
+ 
++static struct sk_buff *ath10k_wmi_op_gen_gpio_config(struct ath10k *ar,
++						     u32 gpio_num, u32 input,
++						     u32 pull_type, u32 intr_mode)
++{
++	struct wmi_gpio_config_cmd *cmd;
++	struct sk_buff *skb;
++
++	skb = ath10k_wmi_alloc_skb(ar, sizeof(*cmd));
++	if (!skb)
++		return ERR_PTR(-ENOMEM);
++
++	cmd = (struct wmi_gpio_config_cmd *)skb->data;
++	cmd->pull_type = __cpu_to_le32(pull_type);
++	cmd->gpio_num = __cpu_to_le32(gpio_num);
++	cmd->input = __cpu_to_le32(input);
++	cmd->intr_mode = __cpu_to_le32(intr_mode);
++
++	ath10k_dbg(ar, ATH10K_DBG_WMI, "wmi gpio_config gpio_num 0x%08x input 0x%08x pull_type 0x%08x intr_mode 0x%08x\n",
++		   gpio_num, input, pull_type, intr_mode);
++
++	return skb;
++}
++
++static struct sk_buff *ath10k_wmi_op_gen_gpio_output(struct ath10k *ar,
++						     u32 gpio_num, u32 set)
++{
++	struct wmi_gpio_output_cmd *cmd;
++	struct sk_buff *skb;
++
++	skb = ath10k_wmi_alloc_skb(ar, sizeof(*cmd));
++	if (!skb)
++		return ERR_PTR(-ENOMEM);
++
++	cmd = (struct wmi_gpio_output_cmd *)skb->data;
++	cmd->gpio_num = __cpu_to_le32(gpio_num);
++	cmd->set = __cpu_to_le32(set);
++
++	ath10k_dbg(ar, ATH10K_DBG_WMI, "wmi gpio_output gpio_num 0x%08x set 0x%08x\n",
++		   gpio_num, set);
++
++	return skb;
++}
++
+ static struct sk_buff *
+ ath10k_wmi_op_gen_set_psmode(struct ath10k *ar, u32 vdev_id,
+ 			     enum wmi_sta_ps_mode psmode)
+@@ -9821,6 +9864,9 @@ static const struct wmi_ops wmi_ops = {
+ 	.fw_stats_fill = ath10k_wmi_main_op_fw_stats_fill,
+ 	.get_vdev_subtype = ath10k_wmi_op_get_vdev_subtype,
+ 	.gen_echo = ath10k_wmi_op_gen_echo,
++	.gen_gpio_config = ath10k_wmi_op_gen_gpio_config,
++	.gen_gpio_output = ath10k_wmi_op_gen_gpio_output,
++
+ 	/* .gen_bcn_tmpl not implemented */
+ 	/* .gen_prb_tmpl not implemented */
+ 	/* .gen_p2p_go_bcn_ie not implemented */
+@@ -9891,6 +9937,8 @@ static const struct wmi_ops wmi_10_1_ops = {
+ 	.fw_stats_fill = ath10k_wmi_10x_op_fw_stats_fill,
+ 	.get_vdev_subtype = ath10k_wmi_op_get_vdev_subtype,
+ 	.gen_echo = ath10k_wmi_op_gen_echo,
++	.gen_gpio_config = ath10k_wmi_op_gen_gpio_config,
++	.gen_gpio_output = ath10k_wmi_op_gen_gpio_output,
+ 	/* .gen_bcn_tmpl not implemented */
+ 	/* .gen_prb_tmpl not implemented */
+ 	/* .gen_p2p_go_bcn_ie not implemented */
+@@ -9969,6 +10017,8 @@ static const struct wmi_ops wmi_10_2_ops = {
+ 	.gen_delba_send = ath10k_wmi_op_gen_delba_send,
+ 	.fw_stats_fill = ath10k_wmi_10x_op_fw_stats_fill,
+ 	.get_vdev_subtype = ath10k_wmi_op_get_vdev_subtype,
++	.gen_gpio_config = ath10k_wmi_op_gen_gpio_config,
++	.gen_gpio_output = ath10k_wmi_op_gen_gpio_output,
+ 	/* .gen_pdev_enable_adaptive_cca not implemented */
+ };
+ 
+@@ -10039,6 +10089,8 @@ static const struct wmi_ops wmi_10_2_4_ops = {
+ 	.gen_pdev_enable_adaptive_cca =
+ 		ath10k_wmi_op_gen_pdev_enable_adaptive_cca,
+ 	.get_vdev_subtype = ath10k_wmi_10_2_4_op_get_vdev_subtype,
++	.gen_gpio_config = ath10k_wmi_op_gen_gpio_config,
++	.gen_gpio_output = ath10k_wmi_op_gen_gpio_output,
+ 	/* .gen_bcn_tmpl not implemented */
+ 	/* .gen_prb_tmpl not implemented */
+ 	/* .gen_p2p_go_bcn_ie not implemented */
+@@ -10119,6 +10171,8 @@ static const struct wmi_ops wmi_10_4_ops = {
+ 	.gen_pdev_bss_chan_info_req = ath10k_wmi_10_2_op_gen_pdev_bss_chan_info,
+ 	.gen_echo = ath10k_wmi_op_gen_echo,
+ 	.gen_pdev_get_tpc_config = ath10k_wmi_10_2_4_op_gen_pdev_get_tpc_config,
++	.gen_gpio_config = ath10k_wmi_op_gen_gpio_config,
++	.gen_gpio_output = ath10k_wmi_op_gen_gpio_output,
+ };
+ 
+ int ath10k_wmi_attach(struct ath10k *ar)
+diff --git a/ath10k-4.19/wmi.h b/ath10k-4.19/wmi.h
+index e4761c8..89622e8 100644
+--- a/ath10k-4.19/wmi.h
++++ b/ath10k-4.19/wmi.h
+@@ -3041,6 +3041,41 @@ enum wmi_10_4_feature_mask {
+ 
+ };
+ 
++/* WMI_GPIO_CONFIG_CMDID */
++enum {
++	WMI_GPIO_PULL_NONE,
++	WMI_GPIO_PULL_UP,
++	WMI_GPIO_PULL_DOWN,
++};
++
++enum {
++	WMI_GPIO_INTTYPE_DISABLE,
++	WMI_GPIO_INTTYPE_RISING_EDGE,
++	WMI_GPIO_INTTYPE_FALLING_EDGE,
++	WMI_GPIO_INTTYPE_BOTH_EDGE,
++	WMI_GPIO_INTTYPE_LEVEL_LOW,
++	WMI_GPIO_INTTYPE_LEVEL_HIGH
++};
++
++/* WMI_GPIO_CONFIG_CMDID */
++struct wmi_gpio_config_cmd {
++	__le32 gpio_num;             /* GPIO number to be setup */
++	__le32 input;                /* 0 - Output/ 1 - Input */
++	__le32 pull_type;            /* Pull type defined above */
++	__le32 intr_mode;            /* Interrupt mode defined above (Input) */
++} __packed;
++
++/* WMI_GPIO_OUTPUT_CMDID */
++struct wmi_gpio_output_cmd {
++	__le32 gpio_num;    /* GPIO number to be setup */
++	__le32 set;         /* Set the GPIO pin*/
++} __packed;
++
++/* WMI_GPIO_INPUT_EVENTID */
++struct wmi_gpio_input_event {
++	__le32 gpio_num;    /* GPIO number which changed state */
++} __packed;
++
+ struct wmi_ext_resource_config_10_4_cmd {
+ 	/* contains enum wmi_host_platform_type */
+ 	__le32 host_platform_config;
+diff --git a/ath10k/debug.c b/ath10k/debug.c
+index b47d9c9..3d0f1d7 100644
+--- a/ath10k/debug.c
++++ b/ath10k/debug.c
+@@ -166,11 +166,11 @@ void ath10k_debug_print_hwfw_info(struct ath10k *ar)
+ 		    ar->id.subsystem_vendor, ar->id.subsystem_device);
+ 
+ 	ath10k_info(ar, "kconfig debug %d debugfs %d tracing %d dfs %d testmode %d\n",
+-		    config_enabled(CONFIG_ATH10K_DEBUG),
+-		    config_enabled(CONFIG_ATH10K_DEBUGFS),
+-		    config_enabled(CONFIG_ATH10K_TRACING),
+-		    config_enabled(CONFIG_ATH10K_DFS_CERTIFIED),
+-		    config_enabled(CONFIG_NL80211_TESTMODE));
++		    IS_ENABLED(CONFIG_ATH10K_DEBUG),
++		    IS_ENABLED(CONFIG_ATH10K_DEBUGFS),
++		    IS_ENABLED(CONFIG_ATH10K_TRACING),
++		    IS_ENABLED(CONFIG_ATH10K_DFS_CERTIFIED),
++		    IS_ENABLED(CONFIG_NL80211_TESTMODE));
+ 
+ 	firmware = ar->normal_mode_fw.fw_file.firmware;
+ 	if (firmware)
+@@ -3422,7 +3422,7 @@ int ath10k_debug_register(struct ath10k *ar)
+ 	debugfs_create_file("nf_cal_period", S_IRUSR | S_IWUSR,
+ 			    ar->debug.debugfs_phy, ar, &fops_nf_cal_period);
+ 
+-	if (config_enabled(CONFIG_ATH10K_DFS_CERTIFIED)) {
++	if (IS_ENABLED(CONFIG_ATH10K_DFS_CERTIFIED)) {
+ 		debugfs_create_file("dfs_simulate_radar", S_IWUSR,
+ 				    ar->debug.debugfs_phy, ar,
+ 				    &fops_simulate_radar);
+diff --git a/ath10k/htt_rx.c b/ath10k/htt_rx.c
+index 5ea733c..330dd91 100644
+--- a/ath10k/htt_rx.c
++++ b/ath10k/htt_rx.c
+@@ -642,11 +642,11 @@ static void ath10k_htt_rx_h_rates(struct ath10k *ar,
+ 		sgi = (info3 >> 7) & 1;
+ 
+ 		status->rate_idx = mcs;
+-		status->flag |= RX_FLAG_HT;
++		status->encoding = RX_ENC_HT;
+ 		if (sgi)
+-			status->flag |= RX_FLAG_SHORT_GI;
++			status->enc_flags |= RX_ENC_FLAG_SHORT_GI;
+ 		if (bw)
+-			status->flag |= RX_FLAG_40MHZ;
++			status->bw = RATE_INFO_BW_40;
+ 		break;
+ 	case HTT_RX_VHT:
+ 	case HTT_RX_VHT_WITH_TXBF:
+@@ -698,10 +698,10 @@ static void ath10k_htt_rx_h_rates(struct ath10k *ar,
+ 		}
+ 
+ 		status->rate_idx = mcs;
+-		status->vht_nss = nss;
++		status->nss = nss;
+ 
+ 		if (sgi)
+-			status->flag |= RX_FLAG_SHORT_GI;
++			status->enc_flags |= RX_ENC_FLAG_SHORT_GI;
+ 
+ 		switch (bw) {
+ 		/* 20MHZ */
+@@ -709,18 +709,18 @@ static void ath10k_htt_rx_h_rates(struct ath10k *ar,
+ 			break;
+ 		/* 40MHZ */
+ 		case 1:
+-			status->flag |= RX_FLAG_40MHZ;
++			status->bw = RATE_INFO_BW_40;
+ 			break;
+ 		/* 80MHZ */
+ 		case 2:
+-			status->vht_flag |= RX_VHT_FLAG_80MHZ;
++			status->bw = RATE_INFO_BW_80;
+ 			break;
+ 		case 3:
+-			status->vht_flag |= RX_VHT_FLAG_160MHZ;
++			status->bw = RATE_INFO_BW_160;
+ 			break;
+ 		}
+ 
+-		status->flag |= RX_FLAG_VHT;
++		status->encoding = RX_ENC_VHT;
+ 		break;
+ 	default:
+ 		break;
+@@ -900,13 +900,10 @@ static void ath10k_htt_rx_h_ppdu(struct ath10k *ar,
+ 		/* New PPDU starts so clear out the old per-PPDU status. */
+ 		status->freq = 0;
+ 		status->rate_idx = 0;
+-		status->vht_nss = 0;
+-		status->vht_flag &= ~RX_VHT_FLAG_80MHZ;
+-		status->flag &= ~(RX_FLAG_HT |
+-				  RX_FLAG_VHT |
+-				  RX_FLAG_SHORT_GI |
+-				  RX_FLAG_40MHZ |
+-				  RX_FLAG_MACTIME_END);
++		status->nss = 0;
++		status->encoding = RX_ENC_LEGACY;
++		status->bw = RATE_INFO_BW_20;
++		status->flag &= ~RX_FLAG_MACTIME_END;
+ 		status->flag |= RX_FLAG_NO_SIGNAL_VAL;
+ 
+ 		ath10k_htt_rx_h_signal(ar, status, rxd);
+@@ -959,7 +956,7 @@ static void ath10k_process_rx(struct ath10k *ar,
+ 	*status = *rx_status;
+ 
+ 	ath10k_dbg(ar, ATH10K_DBG_DATA,
+-		   "rx skb %p len %u peer %pM %s %s sn %u %s%s%s%s%s%s %srate_idx %u vht_nss %u freq %u band %u flag 0x%llx fcs-err %i mic-err %i amsdu-more %i\n",
++		   "rx skb %p len %u peer %pM %s %s sn %u %s%s%s%s%s%s %srate_idx %u vht_nss %u freq %u band %u flag 0x%x fcs-err %i mic-err %i amsdu-more %i\n",
+ 		   skb,
+ 		   skb->len,
+ 		   ieee80211_get_SA(hdr),
+@@ -967,15 +964,15 @@ static void ath10k_process_rx(struct ath10k *ar,
+ 		   is_multicast_ether_addr(ieee80211_get_DA(hdr)) ?
+ 							"mcast" : "ucast",
+ 		   (__le16_to_cpu(hdr->seq_ctrl) & IEEE80211_SCTL_SEQ) >> 4,
+-		   status->flag == 0 ? "legacy" : "",
+-		   status->flag & RX_FLAG_HT ? "ht" : "",
+-		   status->flag & RX_FLAG_VHT ? "vht" : "",
+-		   status->flag & RX_FLAG_40MHZ ? "40" : "",
+-		   status->vht_flag & RX_VHT_FLAG_80MHZ ? "80" : "",
+-		   status->vht_flag & RX_VHT_FLAG_160MHZ ? "160" : "",
+-		   status->flag & RX_FLAG_SHORT_GI ? "sgi " : "",
++		   (status->encoding == RX_ENC_LEGACY) ? "legacy" : "",
++		   (status->encoding == RX_ENC_HT) ? "ht" : "",
++		   (status->encoding == RX_ENC_VHT) ? "vht" : "",
++		   (status->bw == RATE_INFO_BW_40) ? "40" : "",
++		   (status->bw == RATE_INFO_BW_80) ? "80" : "",
++		   (status->bw == RATE_INFO_BW_160) ? "160" : "",
++		   status->enc_flags & RX_ENC_FLAG_SHORT_GI ? "sgi " : "",
+ 		   status->rate_idx,
+-		   status->vht_nss,
++		   status->nss,
+ 		   status->freq,
+ 		   status->band, status->flag,
+ 		   !!(status->flag & RX_FLAG_FAILED_FCS_CRC),
+@@ -2514,7 +2511,7 @@ bool ath10k_htt_t2h_msg_handler(struct ath10k *ar, struct sk_buff *skb)
+ 		u32 freq = __le32_to_cpu(resp->chan_change.freq);
+ 
+ 		ar->tgt_oper_chan =
+-			__ieee80211_get_channel(ar->hw->wiphy, freq);
++			ieee80211_get_channel(ar->hw->wiphy, freq);
+ 		ath10k_dbg(ar, ATH10K_DBG_HTT,
+ 			   "htt chan change freq %u phymode %s\n",
+ 			   freq, ath10k_wmi_phymode_str(phymode));
+diff --git a/ath10k/mac.c b/ath10k/mac.c
+index 11b170f..5b589b1 100644
+--- a/ath10k/mac.c
++++ b/ath10k/mac.c
+@@ -3604,7 +3604,7 @@ static void ath10k_regd_update(struct ath10k *ar)
+ 
+ 	regpair = ar->ath_common.regulatory.regpair;
+ 
+-	if (config_enabled(CONFIG_ATH10K_DFS_CERTIFIED) && ar->dfs_detector) {
++	if (IS_ENABLED(CONFIG_ATH10K_DFS_CERTIFIED) && ar->dfs_detector) {
+ 		nl_dfs_reg = ar->dfs_detector->region;
+ 		wmi_dfs_reg = ath10k_mac_get_dfs_region(nl_dfs_reg);
+ 		ath10k_dbg(ar, ATH10K_DBG_REGULATORY,
+@@ -3638,7 +3638,7 @@ static void ath10k_reg_notifier(struct wiphy *wiphy,
+ 
+ 	ath_reg_notifier_apply(wiphy, request, &ar->ath_common.regulatory);
+ 
+-	if (config_enabled(CONFIG_ATH10K_DFS_CERTIFIED) && ar->dfs_detector) {
++	if (IS_ENABLED(CONFIG_ATH10K_DFS_CERTIFIED) && ar->dfs_detector) {
+ 		ath10k_dbg(ar, ATH10K_DBG_REGULATORY, "reg-notifier: dfs region 0x%x\n",
+ 			   request->dfs_region);
+ 		result = ar->dfs_detector->set_dfs_domain(ar->dfs_detector,
+@@ -8939,7 +8939,7 @@ int ath10k_mac_register(struct ath10k *ar)
+ 	if (!test_bit(ATH10K_FLAG_RAW_MODE, &ar->dev_flags))
+ 		ar->hw->netdev_features = NETIF_F_HW_CSUM;
+ 
+-	if (config_enabled(CONFIG_ATH10K_DFS_CERTIFIED)) {
++	if (IS_ENABLED(CONFIG_ATH10K_DFS_CERTIFIED)) {
+ 		/* Init ath dfs pattern detector */
+ 		ar->ath_common.debug_mask = ATH_DBG_DFS;
+ 		ar->dfs_detector = dfs_pattern_detector_init(&ar->ath_common,
+@@ -8984,7 +8984,7 @@ err_unregister:
+ 	ieee80211_unregister_hw(ar->hw);
+ 
+ err_dfs_detector_exit:
+-	if (config_enabled(CONFIG_ATH10K_DFS_CERTIFIED) && ar->dfs_detector)
++	if (IS_ENABLED(CONFIG_ATH10K_DFS_CERTIFIED) && ar->dfs_detector)
+ 		ar->dfs_detector->exit(ar->dfs_detector);
+ 
+ err_free:
+@@ -8999,7 +8999,7 @@ void ath10k_mac_unregister(struct ath10k *ar)
+ {
+ 	ieee80211_unregister_hw(ar->hw);
+ 
+-	if (config_enabled(CONFIG_ATH10K_DFS_CERTIFIED) && ar->dfs_detector)
++	if (IS_ENABLED(CONFIG_ATH10K_DFS_CERTIFIED) && ar->dfs_detector)
+ 		ar->dfs_detector->exit(ar->dfs_detector);
+ 
+ 	kfree(ar->mac.sbands[NL80211_BAND_2GHZ].channels);
+diff --git a/ath10k/thermal.c b/ath10k/thermal.c
+index 444b52c..6bb1fab 100644
+--- a/ath10k/thermal.c
++++ b/ath10k/thermal.c
+@@ -192,7 +192,7 @@ int ath10k_thermal_register(struct ath10k *ar)
+ 
+ 	/* Avoid linking error on devm_hwmon_device_register_with_groups, I
+ 	 * guess linux/hwmon.h is missing proper stubs. */
+-	if (!config_enabled(CONFIG_HWMON))
++	if (!IS_ENABLED(CONFIG_HWMON))
+ 		return 0;
+ 
+ 	hwmon_dev = devm_hwmon_device_register_with_groups(ar->dev,
+diff --git a/ath10k/wmi.c b/ath10k/wmi.c
+index 9407108..adb2672 100644
+--- a/ath10k/wmi.c
++++ b/ath10k/wmi.c
+@@ -3903,7 +3903,7 @@ void ath10k_wmi_event_dfs(struct ath10k *ar,
+ 		   phyerr->tsf_timestamp, tsf, buf_len);
+ 
+ 	/* Skip event if DFS disabled */
+-	if (!config_enabled(CONFIG_ATH10K_DFS_CERTIFIED))
++	if (!IS_ENABLED(CONFIG_ATH10K_DFS_CERTIFIED))
+ 		return;
+ 
+ 	ATH10K_DFS_STAT_INC(ar, pulses_total);
+-- 
+2.20.1
+

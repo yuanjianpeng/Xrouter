@@ -1,0 +1,22 @@
+#!/bin/sh /etc/rc.common
+# START=19
+
+find_mtd_index() {
+	local PART="$(grep "\"$1\"" /proc/mtd | awk -F: '{print $1}')"
+	local INDEX="${PART##mtd}"
+	echo ${INDEX}
+}
+
+load_caldat ()
+{
+	dd if=/dev/mtd$1 of=/lib/firmware/$2 \
+		iflag=skip_bytes bs=$4 skip=$3 count=1 2>/dev/null
+}
+
+boot () {
+	art_mtd_index=$(find_mtd_index "ART")
+	load_caldat $art_mtd_index ath10k/pre-cal-ahb-a000000.wifi.bin 4096 12064
+	load_caldat $art_mtd_index ath10k/pre-cal-ahb-a800000.wifi.bin 20480 12064
+	modprobe ath10k_pci
+}
+

@@ -1,0 +1,17 @@
+#!/bin/sh /etc/rc.common
+# START=20
+
+boot () {
+	sysctl -p
+	ifconfig lo up
+	mkdir -p /run/netman/
+	start
+}
+
+start () {
+	netman
+}
+
+stop () {
+	stop_prog /usr/bin/netmand /run/netman/netmand.pid
+}

@@ -1,0 +1,38 @@
+
+menu "Toolchain options"
+
+config CTNG_NAME
+	string
+	default "crosstool-ng-1.24.0" if CTNG_1_24_0
+
+choice
+	prompt "crosstool-ng version"
+
+config CTNG_1_24_0
+	bool "1.24.0"
+
+endchoice
+
+config TOOLCHAIN_NAME
+	string "toolchain name"
+	help
+		define the toolchain top dir /opt/$CONFIG_TOOLCHAIN_NAME
+
+config TOOLCHAIN_TARGET_TUPLE
+	string "toolchain target tuple"
+	help
+		toolchain target e.g. arm-linux-gnueabihf
+		used for cross compile, passed to --host of ./configure
+		used to construct cross compile prefix
+		used to construct sysroot
+
+config TOOLCHAIN_LIBS
+	string "toolchain libs installed to rootfs"
+	default "ld libc libm libdl libpthread libresolv"
+
+config TOOLCHAIN_DEBUG_BINS
+	string "toolchain bins for bug e.g. gdbserver, strace"
+	default "gdbserver ltrace strace"
+
+endmenu
+

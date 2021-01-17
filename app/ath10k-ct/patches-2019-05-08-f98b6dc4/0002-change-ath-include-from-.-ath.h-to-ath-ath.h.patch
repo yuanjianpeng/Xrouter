@@ -1,0 +1,43 @@
+From e6db899756e022e0b845482fd1182a60085e68ba Mon Sep 17 00:00:00 2001
+From: Yuan Jianpeng <yuanjianpeng@360.cn>
+Date: Sun, 8 Mar 2020 02:44:00 +0800
+Subject: [PATCH] change ath include from ../ath.h to ath/ath.h
+
+---
+ ath10k-4.19/core.h     | 6 +++---
+ ath10k-4.19/spectral.h | 2 +-
+ 2 files changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/ath10k-4.19/core.h b/ath10k-4.19/core.h
+index 56cd250..253fbf3 100644
+--- a/ath10k-4.19/core.h
++++ b/ath10k-4.19/core.h
+@@ -32,9 +32,9 @@
+ #include "hw.h"
+ #include "targaddrs.h"
+ #include "wmi.h"
+-#include "../ath.h"
+-#include "../regd.h"
+-#include "../dfs_pattern_detector.h"
++#include "ath/ath.h"
++#include "ath/regd.h"
++#include "ath/dfs_pattern_detector.h"
+ #include "spectral.h"
+ #include "thermal.h"
+ #include "wow.h"
+diff --git a/ath10k-4.19/spectral.h b/ath10k-4.19/spectral.h
+index 13276f4..b54321b 100644
+--- a/ath10k-4.19/spectral.h
++++ b/ath10k-4.19/spectral.h
+@@ -17,7 +17,7 @@
+ #ifndef SPECTRAL_H
+ #define SPECTRAL_H
+ 
+-#include "../spectral_common.h"
++#include "ath/spectral_common.h"
+ 
+ /**
+  * struct ath10k_spec_scan - parameters for Atheros spectral scan
+-- 
+2.20.1
+

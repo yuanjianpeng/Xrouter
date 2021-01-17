@@ -1,0 +1,62 @@
+From 457345fd23dd5da05f101ad191a8b516bd6e10c3 Mon Sep 17 00:00:00 2001
+From: Yuan Jianpeng <yuanjianpeng@360.cn>
+Date: Sun, 8 Mar 2020 00:10:33 +0800
+Subject: [PATCH] support out of tree build
+
+---
+ Makefile.build  |  4 ++--
+ Makefile.kernel | 12 ++++++------
+ 2 files changed, 8 insertions(+), 8 deletions(-)
+
+diff --git a/Makefile.build b/Makefile.build
+index a848b37..cfdf1db 100644
+--- a/Makefile.build
++++ b/Makefile.build
+@@ -3,8 +3,8 @@ export
+ 
+ .PHONY: modules
+ modules:
+-	@$(MAKE) -C $(KLIB_BUILD) M=$(BACKPORT_DIR) modules
++	@$(MAKE) -C $(KLIB_BUILD) M=$(if $(BACKPORT_BUILD_DIR),$(BACKPORT_BUILD_DIR) KBUILD_EXTMOD_SRC=$(BACKPORT_DIR),$(BACKPORT_DIR)) modules
+ 
+ .PHONY: clean
+ clean:
+-	@$(MAKE) -C $(KLIB_BUILD) M=$(BACKPORT_DIR) clean
++	@$(MAKE) -C $(KLIB_BUILD) M=$(if $(BACKPORT_BUILD_DIR),$(BACKPORT_BUILD_DIR) KBUILD_EXTMOD_SRC=$(BACKPORT_DIR),$(BACKPORT_DIR)) clean
+diff --git a/Makefile.kernel b/Makefile.kernel
+index 23b2688..0162885 100644
+--- a/Makefile.kernel
++++ b/Makefile.kernel
+@@ -1,15 +1,16 @@
+ ifeq ($(CONFIG_BACKPORT_INTEGRATE),)
++export backport_srctree = $(if $(KBUILD_EXTMOD_SRC),$(KBUILD_EXTMOD_SRC),M)
+ # Since 2.6.21, try-run is available, but cc-disable-warning
+ # was only added later, so we add it here ourselves:
+ backport-cc-disable-warning = $(call try-run,\
+ 	$(CC) $(KBUILD_CPPFLAGS) $(KBUILD_CFLAGS) -W$(strip $(1)) -c -x c /dev/null -o "$$TMP",-Wno-$(strip $(1)))
+ 
+ NOSTDINC_FLAGS := \
+-	-I$(M)/backport-include/ \
+-	-I$(M)/backport-include/uapi \
+-	-I$(M)/include/ \
+-	-I$(M)/include/uapi \
+-	-include $(M)/backport-include/backport/backport.h \
++	-I$(backport_srctree)/backport-include/ \
++	-I$(backport_srctree)/backport-include/uapi \
++	-I$(backport_srctree)/include/ \
++	-I$(backport_srctree)/include/uapi \
++	-include $(backport_srctree)/backport-include/backport/backport.h \
+ 	$(call backport-cc-disable-warning, unused-but-set-variable) \
+ 	-DCPTCFG_VERSION=\"$(BACKPORTS_VERSION)\" \
+ 	-DCPTCFG_KERNEL_VERSION=\"$(BACKPORTED_KERNEL_VERSION)\" \
+@@ -17,7 +18,6 @@ NOSTDINC_FLAGS := \
+ 	$(BACKPORTS_GIT_TRACKER_DEF) \
+ 	$(CFLAGS)
+ 
+-export backport_srctree = $(M)
+ else
+ export BACKPORT_DIR = backports/
+ export backport_srctree = $(BACKPORT_DIR)
+-- 
+2.20.1
+

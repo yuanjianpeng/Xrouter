@@ -1,0 +1,39 @@
+From 0478eeaddee0f3d554bc88bbca5c37d1ae21fc4a Mon Sep 17 00:00:00 2001
+From: Yuan Jianpeng <yuanjianpeng@360.cn>
+Date: Fri, 13 Mar 2020 15:07:12 +0800
+Subject: [PATCH] support user generated version
+
+---
+ Makefile  | 2 ++
+ version.c | 2 ++
+ 2 files changed, 4 insertions(+)
+ create mode 100644 version.c
+
+diff --git a/Makefile b/Makefile
+index 33aaf6a..90dba32 100644
+--- a/Makefile
++++ b/Makefile
+@@ -100,10 +100,12 @@ all: $(ALL)
+ 
+ VERSION_OBJS := $(filter-out version.o, $(OBJS))
+ 
++ifeq ($(USER_GEN_VER),)
+ version.c: version.sh $(patsubst %.o,%.c,$(VERSION_OBJS)) nl80211.h iw.h Makefile \
+ 		$(wildcard .git/index .git/refs/tags)
+ 	@$(NQ) ' GEN ' $@
+ 	$(Q)./version.sh $@
++endif
+ 
+ %.o: %.c iw.h nl80211.h
+ 	@$(NQ) ' CC  ' $@
+diff --git a/version.c b/version.c
+new file mode 100644
+index 0000000..9610f4a
+--- /dev/null
++++ b/version.c
+@@ -0,0 +1,2 @@
++#include "iw.h"
++const char iw_version[] = "5.0.1";
+-- 
+2.20.1
+

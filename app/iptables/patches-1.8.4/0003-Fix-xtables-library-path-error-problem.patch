@@ -1,0 +1,25 @@
+From 7d92ff0eff8a3cabff5ff4b1d75ef63e4c9c21ad Mon Sep 17 00:00:00 2001
+From: Yuan Jianpeng <yuanjp89@163.com>
+Date: Mon, 7 Dec 2020 23:44:14 +0800
+Subject: [PATCH] Fix xtables library path error problem
+
+---
+ configure | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/configure b/configure
+index 158679b..43b56f6 100755
+--- a/configure
++++ b/configure
+@@ -13257,7 +13257,7 @@ regular_CFLAGS="-Wall -Waggregate-return -Wmissing-declarations \
+ 	-Wlogical-op \
+ 	-Winline -pipe";
+ regular_CPPFLAGS="${largefile_cppflags} -D_REENTRANT \
+-	-DXTABLES_LIBDIR=\\\"\${xtlibdir}\\\" -DXTABLES_INTERNAL";
++	-DXTABLES_LIBDIR=\\\"/lib/xtables\\\" -DXTABLES_INTERNAL";
+ kinclude_CPPFLAGS="";
+ if [ -n "$kbuilddir" ]; then
+ 	kinclude_CPPFLAGS="$kinclude_CPPFLAGS -I$kbuilddir/include/uapi -I$kbuilddir/include";
+-- 
+2.25.1
+

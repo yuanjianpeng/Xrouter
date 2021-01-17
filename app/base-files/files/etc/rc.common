@@ -1,0 +1,54 @@
+#!/bin/sh
+# Copyright (C) 2006-2012 OpenWrt.org
+
+initscript=$1
+action=${2:-help}
+shift 2
+
+start() {
+	return 0
+}
+
+stop() {
+	return 0
+}
+
+reload() {
+	return 1
+}
+
+restart() {
+	trap '' TERM
+	stop "$@"
+	start "$@"
+}
+
+boot() {
+	start "$@"
+}
+
+shutdown() {
+	stop
+}
+
+help() {
+	cat <<EOF
+Syntax: $initscript [command]
+
+Available commands:
+	start	Start the service
+	stop	Stop the service
+	restart	Restart the service
+	reload	Reload configuration files (or restart if that fails)
+EOF
+}
+
+. "$initscript"
+
+case $action in
+	start|stop|restart|reload|boot|shutdown)
+		$action "$@" ;;
+	*)
+		help ;;
+esac
+

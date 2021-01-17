@@ -1,0 +1,24 @@
+From 0b25c133022cedd859e18533112bb4791f5c2878 Mon Sep 17 00:00:00 2001
+From: Yuan Jianpeng <yuanjp89@163.com>
+Date: Sun, 6 Dec 2020 17:36:33 +0800
+Subject: [PATCH] Fix Kconfig prompt missing problem
+
+---
+ net/sched/Kconfig | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/net/sched/Kconfig b/net/sched/Kconfig
+index 474b09ed..d4144d76 100644
+--- a/net/sched/Kconfig
++++ b/net/sched/Kconfig
+@@ -3,6 +3,7 @@
+ # 
+ 
+ menuconfig NET_SCHED
++	bool "QoS and/or fair queueing"
+ 	def_bool y
+ 	select NET_SCH_FIFO
+ 	select NET_SCH_FQ_CODEL
+-- 
+2.25.1
+

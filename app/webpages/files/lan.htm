@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+	<title>Xrouter</title>
+	<script type="text/javascript" src="/js/jquery-3.4.1.min.js"></script>
+	<script type="text/javascript" src="/js/base.js"></script>
+	<script type="text/javascript" src="/js/network.js"></script>
+	<style>
+		.header
+		{
+			display: inline-block;
+			width: 100px;
+		}
+		.div_seg
+		{
+			margin: 20px 0 5px 0;
+		}
+		.div_ent
+		{
+			margin: 6px 0;
+		}
+		a
+		{
+			text-decoration: none;
+			margin: 5px 10px;
+		}
+	</style>
+</head>
+<body style="padding:0 0px;">
+	<div>
+		<a href="/">Home</a>
+		<a href="/mode.htm">Mode</a>
+		<a href="/wan.htm">WAN</a>
+		<a>LAN</a>
+		<a href="/dhcp.htm">DHCP</a>
+		<a href="/wifi_2g.htm">WiFi 2.4G</a>
+		<a href="/wifi_5g.htm">WiFi 5G</a>
+	</div>
+	<h1>LAN</h1>
+	<div class="div_ent">
+		<span class="header">IP</span>
+		<input type=text id="ipt_ip" />
+	</div>
+	<div class="div_ent">
+		<span class="header">Netmask</span>
+		<input type=text id="ipt_netmask" />
+	</div>
+	<div class="div_seg">
+		<span class="header"></span>
+		<input type=button value="commit" id="btn_lan" />
+	</div>
+	<script>
+		$(document).ready(init_lan);
+	</script>
+</body>
+</html>
+

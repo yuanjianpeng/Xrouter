@@ -1,0 +1,51 @@
+From 6992467463f24cced5a71d8eebb4bf0d18096d72 Mon Sep 17 00:00:00 2001
+From: Yuan Jianpeng <yuanjp89@163.com>
+Date: Sun, 6 Dec 2020 00:22:46 +0800
+Subject: [PATCH] Fix libtool always relink problem
+
+set hardcode_into_libs=no to disable hardcode staging lib path to
+library rpath, so that we can support no need relink
+
+set need_relink=no to prevent libtool relink
+---
+ build-aux/ltmain.sh | 2 +-
+ configure           | 3 ++-
+ 2 files changed, 3 insertions(+), 2 deletions(-)
+
+diff --git a/build-aux/ltmain.sh b/build-aux/ltmain.sh
+index 63ae69d..64d320d 100644
+--- a/build-aux/ltmain.sh
++++ b/build-aux/ltmain.sh
+@@ -6697,7 +6697,7 @@ func_mode_link ()
+ 	  *)
+ 	    if test "$installed" = no; then
+ 	      func_append notinst_deplibs " $lib"
+-	      need_relink=yes
++	      #need_relink=yes
+ 	    fi
+ 	    ;;
+ 	  esac
+diff --git a/configure b/configure
+index d140c49..d30f2bb 100755
+--- a/configure
++++ b/configure
+@@ -11526,6 +11526,7 @@ uts4*)
+   dynamic_linker=no
+   ;;
+ esac
++hardcode_into_libs=no
+ { $as_echo "$as_me:${as_lineno-$LINENO}: result: $dynamic_linker" >&5
+ $as_echo "$dynamic_linker" >&6; }
+ test "$dynamic_linker" = no && can_build_shared=no
+@@ -12704,7 +12705,7 @@ elif test $pkg_failed = untried; then
+      	{ $as_echo "$as_me:${as_lineno-$LINENO}: result: no" >&5
+ $as_echo "no" >&6; }
+ 	{ $as_echo "$as_me:${as_lineno-$LINENO}: WARNING: *** Disabling building of unit tests" >&5
+-$as_echo "$as_me: WARNING: *** Disabling building of unit tests" >&2;}
++}
+ 	 enable_unit_tests="no"
+ else
+ 	CHECK_CFLAGS=$pkg_cv_CHECK_CFLAGS
+-- 
+2.25.1
+

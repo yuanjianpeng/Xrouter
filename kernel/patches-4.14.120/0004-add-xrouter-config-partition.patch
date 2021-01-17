@@ -1,0 +1,26 @@
+From ead62b92bb33d8d65f98bdb57f3caa3e740d5a2b Mon Sep 17 00:00:00 2001
+From: Yuan Jianpeng <yuanjianpeng@360.cn>
+Date: Wed, 19 Feb 2020 19:15:53 +0800
+Subject: [PATCH] add xrouter config partition
+
+---
+ arch/arm/boot/dts/qcom-ipq4019-ap.dk01.1-c1.dts | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/arch/arm/boot/dts/qcom-ipq4019-ap.dk01.1-c1.dts b/arch/arm/boot/dts/qcom-ipq4019-ap.dk01.1-c1.dts
+index 04c099e4..9956234c 100644
+--- a/arch/arm/boot/dts/qcom-ipq4019-ap.dk01.1-c1.dts
++++ b/arch/arm/boot/dts/qcom-ipq4019-ap.dk01.1-c1.dts
+@@ -86,5 +86,9 @@
+ 			label = "firmware";
+ 			reg = <0x180000 0x1a00000>;
+ 		};
++		config@1fd0000 {
++			label = "config";
++			reg = <0x1fd0000 0x20000>;
++		};
+ 	};
+ };
+-- 
+2.20.1
+

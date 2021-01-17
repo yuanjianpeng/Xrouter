@@ -1,0 +1,25 @@
+From 5c3b7a638ba6a54de1a1d129db9d808a66e6d7a0 Mon Sep 17 00:00:00 2001
+From: Yuan Jianpeng <yuanjp89@163.com>
+Date: Sun, 6 Dec 2020 16:05:06 +0800
+Subject: [PATCH] Add  to YACC compile recipe
+
+---
+ Makefile.in | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/Makefile.in b/Makefile.in
+index 5a6b165..8c8304f 100644
+--- a/Makefile.in
++++ b/Makefile.in
+@@ -481,7 +481,7 @@ scanner.o: scanner.c grammar.h
+ 	$(CC) $(FULL_CFLAGS) -c scanner.c
+ 
+ grammar.c: $(srcdir)/grammar.y
+-	$(YACC) -p pcap_ -o grammar.c -d $<
++	$(YACC) $(YFLAGS) -p pcap_ -o grammar.c -d $<
+ grammar.h: grammar.c
+ ## Recover from the removal of $@
+ 	@if test -f $@; then :; else \
+-- 
+2.25.1
+

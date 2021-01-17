@@ -1,0 +1,25 @@
+From de8918e87e9381001e5135b41325d9a3e4803bae Mon Sep 17 00:00:00 2001
+From: Yuan Jianpeng <yuanjianpeng@360.cn>
+Date: Mon, 17 Feb 2020 23:17:50 +0800
+Subject: [PATCH 1/2] don't add + to module path /lib/modules/4.14.120/
+
+---
+ scripts/setlocalversion | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/scripts/setlocalversion b/scripts/setlocalversion
+index 71f39410..4a583a59 100755
+--- a/scripts/setlocalversion
++++ b/scripts/setlocalversion
+@@ -168,7 +168,7 @@ else
+ 	# LOCALVERSION= is not specified
+ 	if test "${LOCALVERSION+set}" != "set"; then
+ 		scm=$(scm_version --short)
+-		res="$res${scm:++}"
++#		res="$res${scm:++}"
+ 	fi
+ fi
+ 
+-- 
+2.20.1
+

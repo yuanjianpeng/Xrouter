@@ -1,0 +1,51 @@
+From 8bc244c0715cf2a8900645d531ee95ab9913a13f Mon Sep 17 00:00:00 2001
+From: Yuan Jianpeng <yuanjianpeng@360.cn>
+Date: Sun, 22 Mar 2020 00:50:49 +0800
+Subject: [PATCH] export ar40xx switch register read/write function
+
+---
+ drivers/net/phy/ar40xx.c | 21 +++++++++++++++++++++
+ 1 file changed, 21 insertions(+)
+
+diff --git a/drivers/net/phy/ar40xx.c b/drivers/net/phy/ar40xx.c
+index e408e8f7..ef9afa44 100644
+--- a/drivers/net/phy/ar40xx.c
++++ b/drivers/net/phy/ar40xx.c
+@@ -32,6 +32,26 @@
+ 
+ static struct ar40xx_priv *ar40xx_priv;
+ 
++static u32 switch_reg_size;
++
++int switch_reg_read(int reg, u32 *val)
++{
++	if (reg % 4 || reg >= switch_reg_size)
++		return 1;
++	*val = readl(ar40xx_priv->hw_addr + reg);
++	return 0;
++}
++EXPORT_SYMBOL(switch_reg_read);
++
++int switch_reg_write(int reg, u32 val)
++{
++	if (reg % 4 || reg >= switch_reg_size)
++		return 1;
++	writel(val, ar40xx_priv->hw_addr + reg);
++	return 0;
++}
++EXPORT_SYMBOL(switch_reg_write);
++
+ #define MIB_DESC(_s , _o, _n)	\
+ 	{			\
+ 		.size = (_s),	\
+@@ -1964,6 +1984,7 @@ static int ar40xx_probe(struct platform_device *pdev)
+ 		dev_err(&pdev->dev, "Failed to ioremap switch_base!\n");
+ 		return PTR_ERR(priv->hw_addr);
+ 	}
++	switch_reg_size = resource_size(&switch_base);
+ 
+ 	/*psgmii dts get*/
+ 	psgmii_node = of_find_node_by_name(NULL, "ess-psgmii");
+-- 
+2.20.1
+

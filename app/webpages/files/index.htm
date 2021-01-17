@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+	<title>Xrouter</title>
+	<script type="text/javascript" src="/js/jquery-3.4.1.min.js"></script>
+	<script type="text/javascript" src="/js/base.js"></script>
+	<script type="text/javascript" src="/js/home.js"></script>
+	<style>
+		a
+		{
+			text-decoration: none;
+			margin: 5px 10px;
+		}
+	</style>
+</head>
+<body>
+	<div>
+		<a>Home</a>
+		<a href="/mode.htm">Mode</a>
+		<a href="/wan.htm">WAN</a>
+		<a href="/lan.htm">LAN</a>
+		<a href="/dhcp.htm">DHCP</a>
+		<a href="/wifi_2g.htm">WiFi 2.4G</a>
+		<a href="/wifi_5g.htm">WiFi 5G</a>
+	</div>
+	<h1>hello Xrouter user</h1>
+	<div>
+		<span>Memory Total</span>
+		<span id="mtotal"></span>
+		<span>Memory Free</span>
+		<span id="mfree"></span>
+	</div>
+	<div>
+		<span>Up Time</span>
+		<span id="utime"></span>
+	</div>
+	<div>
+		<span>CPU</span>
+		<span id="cpu"></span>
+	</div>
+	<div id="phystatus"> </div>
+</body>
+</html>

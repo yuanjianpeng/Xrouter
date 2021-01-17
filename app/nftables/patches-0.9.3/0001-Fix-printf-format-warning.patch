@@ -1,0 +1,127 @@
+From fa4b200365bc698fbb7f57c67fd05d5885c168cb Mon Sep 17 00:00:00 2001
+From: Yuan Jianpeng <yuanjp89@163.com>
+Date: Sun, 6 Dec 2020 19:24:19 +0800
+Subject: [PATCH] Fix printf format warning
+
+---
+ py/nftables.pyc | Bin 0 -> 15775 bytes
+ src/meta.c      |   2 +-
+ 2 files changed, 1 insertion(+), 1 deletion(-)
+ create mode 100644 py/nftables.pyc
+
+diff --git a/py/nftables.pyc b/py/nftables.pyc
+new file mode 100644
+index 0000000000000000000000000000000000000000..0524a9ae42ebc4f0bbd1c45884e73c37055d19c6
+GIT binary patch
+literal 15775
+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
+UB*Tv;#<AVQM+%jZ%87~p1J>%^CIA2c
+
+literal 0
+HcmV?d00001
+
+diff --git a/src/meta.c b/src/meta.c
+index 796d8e9..baeb5d6 100644
+--- a/src/meta.c
++++ b/src/meta.c
+@@ -408,7 +408,7 @@ static void date_type_print(const struct expr *expr, struct output_ctx *octx)
+ 	 * Do our own printing. The default print function will print in
+ 	 * nanoseconds, which is ugly.
+ 	 */
+-	nft_print(octx, "%lu", tstamp);
++	nft_print(octx, "%lu", (unsigned long)tstamp);
+ }
+ 
+ static time_t parse_iso_date(const char *sym)
+-- 
+2.25.1
+

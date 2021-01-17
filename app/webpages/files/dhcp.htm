@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+	<title>Xrouter</title>
+	<script type="text/javascript" src="/js/jquery-3.4.1.min.js"></script>
+	<script type="text/javascript" src="/js/base.js"></script>
+	<script type="text/javascript" src="/js/network.js"></script>
+	<style>
+		.header
+		{
+			display: inline-block;
+			width: 150px;
+		}
+		.div_seg
+		{
+			margin: 20px 0 5px 0;
+		}
+		.div_ent
+		{
+			margin: 6px 0;
+		}
+		a
+		{
+			text-decoration: none;
+			margin: 5px 10px;
+		}
+	</style>
+</head>
+<body style="padding:0 0px;">
+	<div>
+		<a href="/">Home</a>
+		<a href="/mode.htm">Mode</a>
+		<a href="/wan.htm">WAN</a>
+		<a href="/lan.htm">LAN</a>
+		<a>DHCP</a>
+		<a href="/wifi_2g.htm">WiFi 2.4G</a>
+		<a href="/wifi_5g.htm">WiFi 5G</a>
+	</div>
+	<h1>DHCP Server</h1>
+	<div class="div_ent">
+		<span class="header">Enable</span>
+		<input type=checkbox id="chb_dhcp_server" />
+	</div>
+	<div class="div_ent"><span class="header">DHCP Range</span>
+		<input type=text id="ipt_dhcp_range1" />
+		-
+		<input type=text id="ipt_dhcp_range2" />
+	</div>
+	<div class="div_seg">
+		<span class="header"></span>
+		<input type=button value="commit" id="btn_dhcp" />
+	</div>
+	<script>
+		$(document).ready(init_dhcp);
+	</script>
+</body>
+</html>
+
+

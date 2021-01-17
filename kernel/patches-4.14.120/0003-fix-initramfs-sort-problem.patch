@@ -1,0 +1,25 @@
+From ac467d4ac3744a7c8740b1a860d468619cbbdaa9 Mon Sep 17 00:00:00 2001
+From: Yuan Jianpeng <yuanjianpeng@360.cn>
+Date: Mon, 17 Feb 2020 23:18:26 +0800
+Subject: [PATCH 2/2] fix initramfs sort problem
+
+---
+ scripts/gen_initramfs_list.sh | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/scripts/gen_initramfs_list.sh b/scripts/gen_initramfs_list.sh
+index 93a759b8..17dc2c8f 100755
+--- a/scripts/gen_initramfs_list.sh
++++ b/scripts/gen_initramfs_list.sh
+@@ -186,7 +186,7 @@ dir_filelist() {
+ 	${dep_list}header "$1"
+ 
+ 	srcdir=$(echo "$1" | sed -e 's://*:/:g')
+-	dirlist=$(find "${srcdir}" -printf "%p %m %U %G\n" | sort)
++	dirlist=$(find "${srcdir}" -printf "%p %m %U %G\n" | LANG=C sort)
+ 
+ 	# If $dirlist is only one line, then the directory is empty
+ 	if [  "$(echo "${dirlist}" | wc -l)" -gt 1 ]; then
+-- 
+2.20.1
+

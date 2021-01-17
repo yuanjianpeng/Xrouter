@@ -1,0 +1,75 @@
+#
+# Automatically generated file; DO NOT EDIT.
+# X Router Configuration
+#
+
+#
+# Generic options
+#
+CONFIG_ARCH="arm"
+CONFIG_ARM=y
+# CONFIG_ARM64 is not set
+CONFIG_TARBALL_DIR="/opt/tarballs"
+
+#
+# Toolchain options
+#
+CONFIG_CTNG_NAME="crosstool-ng-1.24.0"
+CONFIG_CTNG_1_24_0=y
+CONFIG_TOOLCHAIN_NAME="toolchain-ipq4018"
+CONFIG_TOOLCHAIN_TARGET_TUPLE="arm-linux-gnueabihf"
+CONFIG_TOOLCHAIN_LIBS="ld-*.so ld-linux-armhf.so.3 libc-*.so libc.so* libstdc++.so libstdc++.so.6 libstdc++.so.6.0.25 libgcc_s.so.* libm-*.so libm.so* libdl-*.so libdl.so* libpthread-*.so libpthread.so* libresolv-*.so libresolv.so* librt-*.so librt.so* libnss_files-*.so libnss_files.so* libnss_dns-*.so libnss_dns.so*"
+CONFIG_TOOLCHAIN_DEBUG_BINS="gdbserver ltrace strace"
+
+#
+# Kernel options
+#
+CONFIG_KERNEL_VER="4.14.120"
+CONFIG_KERNEL_4_14_120=y
+
+#
+# App options
+#
+CONFIG_BUSYBOX=y
+CONFIG_BUSYBOX_VER="1.31.1"
+CONFIG_LIBMNL=y
+CONFIG_LIBMNL_VER="1.0.4"
+CONFIG_LIBNFTNL=y
+CONFIG_LIBNFTNL_VER="1.1.5"
+CONFIG_LIBNL=y
+CONFIG_LIBNL_VER="3.2.25"
+CONFIG_DNSMASQ=y
+CONFIG_DNSMASQ_VER="2.80"
+CONFIG_BOA=y
+CONFIG_BOA_VER="debian-0.94.14rc21-5"
+CONFIG_IPTABLES=y
+CONFIG_IPTABLES_VER="1.8.4"
+CONFIG_NFTABLES=y
+CONFIG_NFTABLES_VER="0.9.3"
+CONFIG_LIBPCAP=y
+CONFIG_LIBPCAP_VER="1.9.1"
+CONFIG_TCPDUMP=y
+CONFIG_TCPDUMP_VER="4.9.3"
+CONFIG_IW=y
+CONFIG_IW_VER="5.0.1"
+CONFIG_MAC80211=y
+CONFIG_MAC80211_VER="4.19.32-1"
+CONFIG_ATH10K_CT=y
+CONFIG_ATH10K_CT_VER="2019-05-08-f98b6dc4"
+CONFIG_ATH10K_CT_CTVER="4.19"
+CONFIG_HOSTAPD=y
+CONFIG_HOSTAPD_VER="2.9"
+CONFIG_WPA_SUPPLICANT=y
+CONFIG_WPA_SUPPLICANT_VER="2.9"
+
+#
+# Xrouter App
+#
+CONFIG_LIBBASE=y
+CONFIG_LOG=y
+CONFIG_CONFIG=y
+CONFIG_XBUS=y
+CONFIG_UTILS=y
+CONFIG_NETMAN=y
+CONFIG_SWITCH=y
+# CONFIG_WEBCGI is not set

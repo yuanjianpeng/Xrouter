@@ -1,0 +1,37 @@
+# Copyright (C) 2006-2013 OpenWrt.org
+#
+# This is free software, licensed under the GNU General Public License v2.
+# See /LICENSE for more information.
+#
+
+mainmenu "X Router Configuration"
+
+menu "Generic options"
+
+config ARCH
+	string 
+	default "arm" if ARM
+	default "arm64" if ARM64
+
+choice 
+	prompt "ARCH"
+	default ARM
+
+config ARM
+	bool "arm"
+
+config ARM64
+	bool "arm64"
+
+endchoice
+
+config TARBALL_DIR
+	string "tarball directory"
+	default "/work/tar"
+
+endmenu
+
+source toolchain/Config.in
+source kernel/Config.in
+source app/Config.in
+
