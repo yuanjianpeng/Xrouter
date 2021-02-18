@@ -1,7 +1,6 @@
 
 app := boa
 ver := $(CONFIG_BOA_VER)
-depends :=
 conf := --build=ix86 --host=$(host) CFLAGS="-Wno-unused-result -Wno-misleading-indentation"
 
 app-$(CONFIG_BOA) += $(app)

@@ -3,6 +3,7 @@ HOST_OUTPUT := $(STAGING)/host
 INSTALL_SRC := $(HOST)/install_source.sh
 INSTALL := $(HOST_OUTPUT)/install
 STRIP_INSTALL := STRIPPROG=$(STRIP) STRIPOPT=-s $(INSTALL) -v -D -s
+MKFW := $(HOST_OUTPUT)/mkfw
 
 host: host/kconfig host/install host/mkfw;
 

@@ -56,7 +56,6 @@ config BOA_VER
 	default "debian-0.94.14rc21-5"
 	depends on BOA
 
-
 menuconfig IPTABLES
 	bool "iptables"
 	default y
@@ -146,6 +145,25 @@ menuconfig WPA_SUPPLICANT_VER
 	default "2.9"
 	depends on WPA_SUPPLICANT
 	
+menuconfig LIBGPGERROR
+	bool "libgpg-error"
+	default y
+
+config LIBGPGERROR_VER
+	string "version"
+	default "1.41"
+	depends on LIBGPGERROR
+
+menuconfig LIBGCRYPT
+	bool "libgcrypt"
+	select LIBGPGERROR
+	default y
+
+config LIBGCRYPT_VER
+	string "version"
+	default "1.9.1"
+	depends on LIBGCRYPT
+	
 menu "Xrouter App"
 
 config LIBBASE
@@ -192,7 +210,12 @@ config WEBCGI
 	select SWITCH
 	select LOG
 	select CONFIG
-	
+
+config UPGRADE
+	bool "upgrade util"
+	select libbase
+	select libgcrypt
+
 endmenu
 
 endmenu

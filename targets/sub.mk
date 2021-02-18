@@ -10,5 +10,10 @@ target/fit:
 	$(HQ)cp $(MODEL_DIR)/fit-image.its $(OUTPUT)/
 	$(H)cd $(OUTPUT) && $(Q)mkimage -f fit-image.its $(OUTPUT)/$(MODEL).itb
 
-target: target/fit;
+target/bin:
+	$(E)
+	$(H)cd $(OUTPUT) && $(MKFW) -c $(MODEL_DIR)/firmware.config \
+		-k $(HOST)/xrouter.priv $(MODEL).bin
+
+target: target/fit target/bin;
 

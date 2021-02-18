@@ -1,8 +1,8 @@
 
 VPATH := $(src)
 libs := $(lib:%=%.so)
-CFLAGS += $(cflags)
-LDFLAGS += $(ldflags)
+override CFLAGS += $(cflags)
+override LDFLAGS += $(ldflags)
 
 subdirs := $(sort $(filter-out ./,$(dir $(foreach bin,$(bin) $(lib),$($(bin)-obj)))))
 $(if $(subdirs),$(shell mkdir -p $(subdirs)))
